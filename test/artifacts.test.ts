@@ -11,7 +11,10 @@ import {
   defineArtifactRegistry,
   standardArtifactDefinitions,
 } from "../src";
-import { artifactToRAGUploads } from "../src/rag";
+import {
+  artifactToRAGUploads,
+  createArtifactRAGIndexCoordinator,
+} from "../src/rag";
 
 const registry = defineArtifactRegistry({
   page: {
@@ -374,5 +377,42 @@ describe("artifact lifecycle", () => {
 
     expect(String(created)).toContain("artifact-1");
     expect(String(listed)).toContain("Tool page");
+  });
+
+  test("keeps overlapping RAG document ids when replacing an index", async () => {
+    const { service } = createFixture();
+    const artifact = await service.create("owner-1", {
+      content: { blocks: [], theme: "light" },
+      createdBy: "agent",
+      kind: "page",
+      title: "Indexed page",
+    });
+    const removed: string[][] = [];
+    const states: Array<{ documentIds?: string[]; status: string }> = [];
+    const coordinator = createArtifactRAGIndexCoordinator({
+      reader: { read: async () => new Uint8Array() },
+      service: {
+        getIndexingState: async () => ({
+          documentIds: ["same", "obsolete"],
+        }),
+        markIndexing: async (_ownerId, _artifactId, state) => {
+          states.push(state);
+        },
+      },
+      target: {
+        index: async () => ({ documentIds: ["same", "new"] }),
+        remove: async (documentIds) => {
+          removed.push(documentIds);
+        },
+      },
+    });
+
+    await coordinator.index(artifact);
+
+    expect(removed).toEqual([["obsolete"]]);
+    expect(states.at(-1)).toMatchObject({
+      documentIds: ["same", "new"],
+      status: "indexed",
+    });
   });
 });

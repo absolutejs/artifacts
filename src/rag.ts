@@ -113,7 +113,13 @@ export const createArtifactRAGIndexCoordinator = (options: {
       const uploads = await artifactToRAGUploads(artifact, options.reader);
       const indexed = await options.target.index(uploads, { artifact });
       if (previous?.documentIds.length && options.target.remove) {
-        await options.target.remove(previous.documentIds, { artifact });
+        const currentIds = new Set(indexed.documentIds);
+        const obsoleteIds = previous.documentIds.filter(
+          (documentId) => !currentIds.has(documentId),
+        );
+        if (obsoleteIds.length) {
+          await options.target.remove(obsoleteIds, { artifact });
+        }
       }
       await options.service.markIndexing(artifact.ownerId, artifact.id, {
         documentIds: indexed.documentIds,
