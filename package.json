@@ -1,0 +1,58 @@
+{
+  "name": "@absolutejs/artifacts",
+  "version": "0.0.1",
+  "description": "Typed, versioned artifacts for AI products — schemas, lifecycle, storage, rendering, publishing, revisions, and agent tools without prescribing a database or host.",
+  "author": "Alex Kahn",
+  "license": "BUSL-1.1",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/src/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/absolutejs/artifacts.git"
+  },
+  "homepage": "https://github.com/absolutejs/artifacts",
+  "bugs": {
+    "url": "https://github.com/absolutejs/artifacts/issues"
+  },
+  "scripts": {
+    "build": "rm -rf dist && bun build src/index.ts src/manifest.ts --outdir dist --root ./src --target=bun --external @sinclair/typebox --external @sinclair/typebox/value && tsc --emitDeclarationOnly --project tsconfig.json && absolute-manifest emit",
+    "format": "prettier --write \"./**/*.{ts,json,md}\"",
+    "release": "bun run format && bun run test && bun run build && bun publish",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit --project tsconfig.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "absolutejs": {
+    "manifestContract": 1
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./manifest": {
+      "types": "./dist/src/manifest.d.ts",
+      "import": "./dist/manifest.js",
+      "default": "./dist/manifest.js"
+    },
+    "./manifest.json": "./dist/manifest.json"
+  },
+  "dependencies": {
+    "@absolutejs/manifest": "^0.1.0",
+    "@sinclair/typebox": "^0.34.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "prettier": "3.5.3",
+    "typescript": "5.8.3"
+  }
+}
