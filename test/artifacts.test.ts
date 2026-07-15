@@ -3,7 +3,9 @@ import { Type } from "@sinclair/typebox";
 import {
   ArtifactError,
   createArtifactRendererRegistry,
+  createArtifactGeneratorRegistry,
   createArtifactService,
+  createMemoryArtifactAssetStore,
   createArtifactTools,
   createMemoryArtifactStore,
   defineArtifactRegistry,
@@ -184,6 +186,149 @@ describe("artifact lifecycle", () => {
     expect(published.status).toBe("published");
     expect(draft.status).toBe("draft");
     expect(draft.publication).toBeUndefined();
+  });
+
+  test("pins publications to a revision unless live mode is requested", async () => {
+    const { service } = createFixture();
+    const pinned = await service.create("owner-1", {
+      content: { blocks: [], theme: "dark" },
+      createdBy: "agent",
+      kind: "page",
+      title: "Pinned",
+    });
+    const published = await service.publish("owner-1", pinned.id);
+    const edited = await service.update("owner-1", pinned.id, {
+      title: "Pinned edit",
+    });
+    const live = await service.create("owner-1", {
+      content: { blocks: [], theme: "dark" },
+      createdBy: "agent",
+      kind: "page",
+      title: "Live",
+    });
+    const livePublished = await service.publish("owner-1", live.id, {
+      mode: "live",
+    });
+    const liveEdited = await service.update("owner-1", live.id, {
+      title: "Live edit",
+    });
+
+    expect(published.publication?.revision).toBe(1);
+    expect(edited.publication?.revision).toBe(1);
+    expect(livePublished.publication?.mode).toBe("live");
+    expect(liveEdited.publication?.revision).toBe(liveEdited.revision);
+  });
+
+  test("writes lifecycle events and indexing state through the store", async () => {
+    const { service } = createFixture();
+    const artifact = await service.create("owner-1", {
+      content: { blocks: [], theme: "light" },
+      createdBy: "agent",
+      kind: "page",
+      title: "Events",
+    });
+    await service.update("owner-1", artifact.id, { title: "Revised" });
+    const state = await service.markIndexing("owner-1", artifact.id, {
+      documentIds: ["rag-1"],
+      revision: 2,
+      status: "indexed",
+    });
+    const events = await service.listEvents({ processed: false });
+    await service.markEventProcessed(events[0]!.id);
+
+    expect(events.map((entry) => entry.type)).toEqual([
+      "artifact.created",
+      "artifact.revised",
+      "artifact.indexing_changed",
+    ]);
+    expect(state.documentIds).toEqual(["rag-1"]);
+    expect(
+      await service.getIndexingState("owner-1", artifact.id),
+    ).toMatchObject({ revision: 2, status: "indexed" });
+    expect(await service.listEvents({ processed: true })).toHaveLength(1);
+  });
+
+  test("generates and commits a multi-file bundle as one revision", async () => {
+    const assetStore = createMemoryArtifactAssetStore();
+    const service = createArtifactService({
+      assetStore,
+      registry: defineArtifactRegistry(standardArtifactDefinitions),
+      store: createMemoryArtifactStore(),
+    });
+    const generators = createArtifactGeneratorRegistry([
+      {
+        generate: async () => ({
+          assets: [
+            {
+              data: new TextEncoder().encode("# Report"),
+              mediaType: "text/markdown",
+              name: "report.md",
+              role: "primary",
+            },
+            {
+              data: new TextEncoder().encode("Report preview"),
+              mediaType: "text/plain",
+              name: "preview.txt",
+              role: "preview",
+            },
+          ],
+          content: { summary: "Generated report" },
+          provenance: {
+            lineage: [{ relation: "generated_from", sourceId: "source-1" }],
+            tool: "report_generator",
+          },
+          title: "Report",
+        }),
+        kind: "document",
+        name: "report",
+      },
+    ]);
+    const artifact = await generators.generate(service, {
+      createdBy: "agent",
+      kind: "document",
+      ownerId: "owner-1",
+    });
+
+    expect(artifact.assets).toHaveLength(2);
+    expect(artifact.revision).toBe(1);
+    expect(artifact.provenance?.lineage?.[0]?.sourceId).toBe("source-1");
+    expect(await service.listRevisions("owner-1", artifact.id)).toHaveLength(1);
+  });
+
+  test("garbage collection retains historical references and deletes orphans", async () => {
+    const assetStore = createMemoryArtifactAssetStore();
+    const service = createArtifactService({
+      assetStore,
+      registry: defineArtifactRegistry(standardArtifactDefinitions),
+      store: createMemoryArtifactStore(),
+    });
+    const artifact = await service.createBundle("owner-1", {
+      assets: [
+        {
+          data: new TextEncoder().encode("kept"),
+          mediaType: "text/plain",
+          name: "kept.txt",
+        },
+      ],
+      content: {},
+      createdBy: "agent",
+      kind: "file",
+      title: "Kept",
+    });
+    const orphan = await assetStore.write(
+      {
+        data: new TextEncoder().encode("orphan"),
+        mediaType: "text/plain",
+        name: "orphan.txt",
+      },
+      { artifact, idempotencyKey: "orphan" },
+    );
+    const result = await service.collectAssetGarbage({});
+
+    expect(result.retained.map((asset) => asset.id)).toContain(
+      artifact.assets[0]!.id,
+    );
+    expect(result.deleted.map((asset) => asset.id)).toContain(orphan.id);
   });
 
   test("renders with registered host renderers", async () => {

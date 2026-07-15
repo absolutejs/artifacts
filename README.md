@@ -23,6 +23,11 @@ routes, authorization, UI, or hosting.
 - Standard file-backed kinds for documents, presentations, spreadsheets,
   datasets, code, images, audio, video, email, archives, and generic files
 - An optional bridge to `@absolutejs/rag` ingestion
+- Provider-neutral generation registries with atomic multi-file bundles
+- Revision-pinned or explicitly live publications
+- Durable lifecycle events designed for transactional outboxes
+- Per-revision RAG indexing state and an indexing coordinator
+- Artifact/source lineage and history-aware asset garbage collection
 
 Your application retains authorization, durable persistence, public tokens,
 URLs, notifications, analytics, submissions, and product-specific rendering.
@@ -121,6 +126,46 @@ await artifacts.attach("owner-123", report.id, {
 });
 ```
 
+Multiple generated files should use one staged transaction and therefore one
+artifact revision:
+
+```ts
+const report = await artifacts.createBundle("owner-123", {
+  assets: [pdfOutput, docxOutput, thumbnailOutput],
+  content: { summary: "Quarterly results" },
+  createdBy: "agent",
+  kind: "document",
+  provenance: {
+    lineage: [{ relation: "generated_from", sourceId: "rag-document-123" }],
+    tool: "quarterly_report_generator",
+  },
+  title: "Q3 report",
+});
+```
+
+## Generation
+
+Generators are provider-neutral. They return validated structured content and
+zero or more file writes; the registry commits those outputs through the same
+artifact bundle lifecycle:
+
+```ts
+const generators = createArtifactGeneratorRegistry([
+  {
+    kind: "presentation",
+    name: "company-deck",
+    generate: async ({ prompt }) => buildPresentation(prompt),
+  },
+]);
+
+const deck = await generators.generate(artifacts, {
+  createdBy: "agent",
+  kind: "presentation",
+  ownerId: member.id,
+  prompt: "Build the partner launch deck",
+});
+```
+
 ## RAG ingestion
 
 The optional `@absolutejs/artifacts/rag` entry point resolves one current or
@@ -136,6 +181,22 @@ const revision = await artifacts.getRevision("owner-123", report.id, 2);
 const uploads = await artifactToRAGUploads(revision, assetStore);
 const upsert = await buildRAGUpsertInputFromUploads({ uploads });
 ```
+
+`createArtifactRAGIndexCoordinator` wraps that conversion with durable
+`pending`, `indexed`, and `failed` state. It removes document IDs from the
+previous indexed revision after the replacement succeeds.
+
+## Events and retention
+
+Every lifecycle mutation supplies its event to the artifact store in the same
+call that writes the current record and immutable revision. Durable adapters
+should commit those rows in one database transaction, then workers can consume
+unprocessed events for RAG indexing, previews, notifications, scanning, or
+conversion.
+
+Asset collection compares storage candidates with references across every
+retained revision. `collectAssetGarbage({ dryRun: true })` previews deletion;
+only unreferenced objects older than the configured minimum age are eligible.
 
 ## Compose publishing and rendering
 
@@ -153,6 +214,10 @@ const artifacts = createArtifactService({
   store: postgresArtifactStore,
 });
 ```
+
+Publishing defaults to `pinned`: the public record names the exact immutable
+revision. `mode: "live"` is an explicit alternative whose revision advances
+with later edits.
 
 Renderers are independently registered by artifact kind and output format:
 

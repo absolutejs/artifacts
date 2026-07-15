@@ -4,9 +4,17 @@ import {
   ArtifactError,
   type ArtifactAssetReference,
   type ArtifactAssetWriteInput,
+  type ArtifactBundleCreateInput,
   type ArtifactCreateInput,
+  type ArtifactEvent,
+  type ArtifactEventQuery,
+  type ArtifactEventType,
+  type ArtifactGarbageCollectionResult,
+  type ArtifactIndexingState,
+  type ArtifactIndexingStatus,
   type ArtifactListQuery,
   type ArtifactPublication,
+  type ArtifactPublishInput,
   type ArtifactRecord,
   type ArtifactUpdateInput,
 } from "./types";
@@ -14,7 +22,11 @@ import {
 export type ArtifactPublisher = {
   publish(
     artifact: ArtifactRecord,
-    options: { idempotencyKey: string },
+    options: {
+      idempotencyKey: string;
+      mode: "live" | "pinned";
+      revision: number;
+    },
   ): Promise<{ id: string; url: string }>;
   unpublish(
     artifact: ArtifactRecord,
@@ -27,6 +39,7 @@ export type ArtifactServiceOptions<
 > = {
   assetStore?: ArtifactAssetStore;
   clock?: () => Date;
+  eventIdFactory?: () => string;
   idFactory?: () => string;
   publisher?: ArtifactPublisher;
   registry: ArtifactRegistry<TDefinitions>;
@@ -61,6 +74,21 @@ export const createArtifactService = <
 ) => {
   const now = () => (options.clock ?? (() => new Date()))().toISOString();
   const idFactory = options.idFactory ?? (() => crypto.randomUUID());
+  const eventIdFactory = options.eventIdFactory ?? (() => crypto.randomUUID());
+
+  const event = (
+    artifact: ArtifactRecord,
+    type: ArtifactEventType,
+    payload?: Record<string, unknown>,
+  ): ArtifactEvent => ({
+    artifactId: artifact.id,
+    createdAt: now(),
+    id: eventIdFactory(),
+    ownerId: artifact.ownerId,
+    payload,
+    revision: artifact.revision,
+    type,
+  });
 
   const validateAssets = (kind: string, assets: ArtifactAssetReference[]) => {
     const policy = options.registry.definitions[kind]?.assets;
@@ -97,42 +125,79 @@ export const createArtifactService = <
     return assets;
   };
 
-  const validateNewAsset = (
+  const validateAssetInputs = (
     kind: string,
-    input: ArtifactAssetWriteInput,
-    currentCount: number,
+    inputs: ArtifactAssetWriteInput[],
+    currentCount = 0,
   ) => {
     const policy = options.registry.definitions[kind]?.assets;
-    if (!policy) {
+    if (!policy && inputs.length > 0) {
       throw new ArtifactError(
         "invalid_content",
         `${kind} artifacts do not accept file assets`,
       );
     }
-    if (policy.maxCount !== undefined && currentCount >= policy.maxCount) {
+    if (
+      policy?.maxCount !== undefined &&
+      currentCount + inputs.length > policy.maxCount
+    ) {
       throw new ArtifactError(
         "invalid_content",
         `${kind} artifacts accept at most ${policy.maxCount} file assets`,
       );
     }
-    if (
-      policy.acceptedMediaTypes?.length &&
-      !policy.acceptedMediaTypes.some((accepted) =>
-        mediaTypeMatches(accepted, input.mediaType),
-      )
-    ) {
+    const rejected = inputs.find(
+      (input) =>
+        policy?.acceptedMediaTypes?.length &&
+        !policy.acceptedMediaTypes.some((accepted) =>
+          mediaTypeMatches(accepted, input.mediaType),
+        ),
+    );
+    if (rejected) {
       throw new ArtifactError(
         "invalid_content",
-        `${input.mediaType} is not accepted by ${kind} artifacts`,
+        `${rejected.mediaType} is not accepted by ${kind} artifacts`,
       );
     }
   };
 
+  const buildRecord = (
+    ownerId: string,
+    input: ArtifactCreateInput,
+    assets: ArtifactAssetReference[],
+  ) => {
+    const definition = options.registry.definitions[input.kind];
+    if (!definition) {
+      throw new ArtifactError(
+        "unknown_kind",
+        `Unknown artifact kind: ${input.kind}`,
+      );
+    }
+    const timestamp = now();
+    const artifact: ArtifactRecord = {
+      assets: validateAssets(input.kind, assets),
+      capabilities: definition.capabilities ?? ["archive", "edit", "preview"],
+      content: options.registry.parse(input.kind, input.content),
+      createdAt: timestamp,
+      createdBy: input.createdBy,
+      id: idFactory(),
+      kind: input.kind,
+      metadata: input.metadata ?? {},
+      ownerId,
+      provenance: input.provenance,
+      revision: 1,
+      schemaVersion: definition.schemaVersion ?? 1,
+      status: "draft",
+      title: input.title.trim(),
+      updatedAt: timestamp,
+    };
+
+    return artifact;
+  };
+
   const get = async (ownerId: string, artifactId: string) => {
     const artifact = await options.store.get(ownerId, artifactId);
-    if (!artifact) {
-      throw new ArtifactError("not_found", "Artifact not found");
-    }
+    if (!artifact) throw new ArtifactError("not_found", "Artifact not found");
 
     return artifact;
   };
@@ -140,8 +205,12 @@ export const createArtifactService = <
   const saveRevision = async (
     artifact: ArtifactRecord,
     expectedRevision: number,
+    type: ArtifactEventType,
+    payload?: Record<string, unknown>,
   ) => {
-    const saved = await options.store.save(artifact, expectedRevision);
+    const saved = await options.store.save(artifact, expectedRevision, [
+      event(artifact, type, payload),
+    ]);
     if (!saved) {
       throw new ArtifactError(
         "conflict",
@@ -152,20 +221,29 @@ export const createArtifactService = <
     return artifact;
   };
 
-  return {
+  const requireAssetTransactions = () => {
+    if (!options.assetStore?.stage) {
+      throw new ArtifactError(
+        "asset_transaction_unavailable",
+        "The configured artifact asset store does not support atomic bundles",
+      );
+    }
+
+    return options.assetStore;
+  };
+
+  const service = {
     archive: async (ownerId: string, artifactId: string) => {
       const current = await get(ownerId, artifactId);
       requireCapability(current, "archive");
+      const archived = {
+        ...current,
+        revision: current.revision + 1,
+        status: "archived" as const,
+        updatedAt: now(),
+      };
 
-      return saveRevision(
-        {
-          ...current,
-          revision: current.revision + 1,
-          status: "archived",
-          updatedAt: now(),
-        },
-        current.revision,
-      );
+      return saveRevision(archived, current.revision, "artifact.archived");
     },
     attach: async (
       ownerId: string,
@@ -175,7 +253,7 @@ export const createArtifactService = <
     ) => {
       const current = await get(ownerId, artifactId);
       requireCapability(current, "attach");
-      validateNewAsset(current.kind, input, current.assets.length);
+      validateAssetInputs(current.kind, [input], current.assets.length);
       if (!options.assetStore) {
         throw new ArtifactError(
           "asset_store_unavailable",
@@ -186,51 +264,125 @@ export const createArtifactService = <
         artifact: current,
         idempotencyKey: `artifact:${current.id}:asset:${current.revision + 1}`,
       });
-      const assets = validateAssets(current.kind, [
-        ...current.assets.filter((asset) => asset.id !== reference.id),
-        reference,
-      ]);
 
       return saveRevision(
         {
           ...current,
-          assets,
+          assets: validateAssets(current.kind, [...current.assets, reference]),
           revision: current.revision + 1,
           updatedAt: now(),
         },
         expectedRevision ?? current.revision,
+        "artifact.asset_attached",
+        { assetIds: [reference.id] },
       );
     },
-    create: async (ownerId: string, input: ArtifactCreateInput) => {
-      const definition = options.registry.definitions[input.kind];
-      if (!definition) {
+    attachBundle: async (
+      ownerId: string,
+      artifactId: string,
+      inputs: ArtifactAssetWriteInput[],
+      expectedRevision?: number,
+    ) => {
+      const current = await get(ownerId, artifactId);
+      requireCapability(current, "attach");
+      validateAssetInputs(current.kind, inputs, current.assets.length);
+      const assetStore = requireAssetTransactions();
+      const transaction = await assetStore.stage!(inputs, {
+        artifact: current,
+        idempotencyKey: `artifact:${current.id}:bundle:${current.revision + 1}`,
+      });
+      const assets = validateAssets(current.kind, [
+        ...current.assets,
+        ...transaction.references,
+      ]);
+      const revised: ArtifactRecord = {
+        ...current,
+        assets,
+        revision: current.revision + 1,
+        updatedAt: now(),
+      };
+      try {
+        await transaction.commit();
+
+        return await saveRevision(
+          revised,
+          expectedRevision ?? current.revision,
+          "artifact.asset_attached",
+          { assetIds: transaction.references.map((asset) => asset.id) },
+        );
+      } catch (error) {
+        await transaction.rollback();
+        throw error;
+      }
+    },
+    collectAssetGarbage: async (input: {
+      dryRun?: boolean;
+      minimumAgeMs?: number;
+    }): Promise<ArtifactGarbageCollectionResult> => {
+      if (!options.assetStore) {
         throw new ArtifactError(
-          "unknown_kind",
-          `Unknown artifact kind: ${input.kind}`,
+          "asset_store_unavailable",
+          "No artifact asset store is configured",
         );
       }
-      const content = options.registry.parse(input.kind, input.content);
-      const timestamp = now();
-      const artifact: ArtifactRecord = {
-        assets: validateAssets(input.kind, input.assets ?? []),
-        capabilities: definition.capabilities ?? ["archive", "edit", "preview"],
-        content,
-        createdAt: timestamp,
-        createdBy: input.createdBy,
-        id: idFactory(),
-        kind: input.kind,
-        metadata: input.metadata ?? {},
-        ownerId,
-        provenance: input.provenance,
-        revision: 1,
-        schemaVersion: definition.schemaVersion ?? 1,
-        status: "draft",
-        title: input.title.trim(),
-        updatedAt: timestamp,
-      };
-      await options.store.create(artifact);
+      const referenced = new Set(await options.store.listReferencedAssetIds());
+      const cutoff = Date.now() - (input.minimumAgeMs ?? 0);
+      const candidates = await options.assetStore.listCandidates();
+      const deleted: ArtifactAssetReference[] = [];
+      const retained: ArtifactAssetReference[] = [];
+      for (const candidate of candidates) {
+        if (
+          referenced.has(candidate.reference.id) ||
+          new Date(candidate.createdAt).getTime() > cutoff
+        ) {
+          retained.push(candidate.reference);
+        } else {
+          deleted.push(candidate.reference);
+          if (!input.dryRun)
+            await options.assetStore.delete(candidate.reference);
+        }
+      }
+
+      return { deleted, retained };
+    },
+    create: async (ownerId: string, input: ArtifactCreateInput) => {
+      const artifact = buildRecord(ownerId, input, input.assets ?? []);
+      await options.store.create(artifact, [
+        event(artifact, "artifact.created"),
+      ]);
 
       return artifact;
+    },
+    createBundle: async (ownerId: string, input: ArtifactBundleCreateInput) => {
+      const { assets: assetInputs = [], ...createInput } = input;
+      validateAssetInputs(input.kind, assetInputs);
+      if (assetInputs.length === 0) {
+        return service.create(ownerId, createInput);
+      }
+      const assetStore = requireAssetTransactions();
+      const provisional = buildRecord(ownerId, createInput, []);
+      const transaction = await assetStore.stage!(assetInputs, {
+        artifact: provisional,
+        idempotencyKey: `artifact:${provisional.id}:bundle:1`,
+      });
+      const artifact = {
+        ...provisional,
+        assets: validateAssets(input.kind, transaction.references),
+      };
+      try {
+        await transaction.commit();
+        await options.store.create(artifact, [
+          event(artifact, "artifact.created"),
+          event(artifact, "artifact.generated", {
+            assetIds: transaction.references.map((asset) => asset.id),
+          }),
+        ]);
+
+        return artifact;
+      } catch (error) {
+        await transaction.rollback();
+        throw error;
+      }
     },
     detach: async (
       ownerId: string,
@@ -253,9 +405,13 @@ export const createArtifactService = <
           updatedAt: now(),
         },
         expectedRevision ?? current.revision,
+        "artifact.asset_detached",
+        { assetId },
       );
     },
     get,
+    getIndexingState: (ownerId: string, artifactId: string) =>
+      options.store.getIndexingState(ownerId, artifactId),
     getRevision: async (
       ownerId: string,
       artifactId: string,
@@ -274,9 +430,45 @@ export const createArtifactService = <
     },
     list: (ownerId: string, query?: ArtifactListQuery) =>
       options.store.list(ownerId, query),
+    listEvents: (query?: ArtifactEventQuery) => options.store.listEvents(query),
     listRevisions: (ownerId: string, artifactId: string) =>
       options.store.listRevisions(ownerId, artifactId),
-    publish: async (ownerId: string, artifactId: string) => {
+    markEventProcessed: (eventId: string, processedAt = now()) =>
+      options.store.markEventProcessed(eventId, processedAt),
+    markIndexing: async (
+      ownerId: string,
+      artifactId: string,
+      input: {
+        documentIds?: string[];
+        error?: string;
+        revision: number;
+        status: ArtifactIndexingStatus;
+      },
+    ) => {
+      const artifact = await get(ownerId, artifactId);
+      const state: ArtifactIndexingState = {
+        artifactId,
+        documentIds: input.documentIds ?? [],
+        error: input.error,
+        indexedAt: input.status === "indexed" ? now() : undefined,
+        revision: input.revision,
+        status: input.status,
+        updatedAt: now(),
+      };
+      await options.store.putIndexingState(ownerId, state, [
+        event(artifact, "artifact.indexing_changed", {
+          indexingRevision: state.revision,
+          indexingStatus: state.status,
+        }),
+      ]);
+
+      return state;
+    },
+    publish: async (
+      ownerId: string,
+      artifactId: string,
+      input: ArtifactPublishInput = {},
+    ) => {
       const current = await get(ownerId, artifactId);
       requireCapability(current, "publish");
       if (!options.publisher) {
@@ -285,59 +477,41 @@ export const createArtifactService = <
           "No artifact publisher is configured",
         );
       }
+      const mode = input.mode ?? "pinned";
+      const publishedRevision = current.revision;
       const result = await options.publisher.publish(current, {
-        idempotencyKey: `artifact:${current.id}:publish:${current.revision + 1}`,
+        idempotencyKey: `artifact:${current.id}:publish:${publishedRevision}:${mode}`,
+        mode,
+        revision: publishedRevision,
       });
       const publishedAt = now();
       const publication: ArtifactPublication = {
         id: result.id,
+        mode,
         publishedAt,
+        revision: publishedRevision,
         url: result.url,
       };
+      const published = {
+        ...current,
+        publication,
+        revision: current.revision + 1,
+        status: "published" as const,
+        updatedAt: publishedAt,
+      };
 
-      return saveRevision(
-        {
-          ...current,
-          publication,
-          revision: current.revision + 1,
-          status: "published",
-          updatedAt: publishedAt,
-        },
-        current.revision,
-      );
-    },
-    unpublish: async (ownerId: string, artifactId: string) => {
-      const current = await get(ownerId, artifactId);
-      requireCapability(current, "publish");
-      if (!options.publisher) {
-        throw new ArtifactError(
-          "publisher_unavailable",
-          "No artifact publisher is configured",
-        );
-      }
-      await options.publisher.unpublish(current, {
-        idempotencyKey: `artifact:${current.id}:unpublish:${current.revision + 1}`,
+      return saveRevision(published, current.revision, "artifact.published", {
+        mode,
+        publishedRevision,
       });
-
-      return saveRevision(
-        {
-          ...current,
-          publication: undefined,
-          revision: current.revision + 1,
-          status: "draft",
-          updatedAt: now(),
-        },
-        current.revision,
-      );
     },
     readAsset: async (ownerId: string, artifactId: string, assetId: string) => {
       const artifact = await get(ownerId, artifactId);
       const asset = artifact.assets.find(
         (candidate) => candidate.id === assetId,
       );
-      if (!asset) {
+      if (!asset)
         throw new ArtifactError("not_found", "Artifact asset not found");
-      }
       if (!options.assetStore) {
         throw new ArtifactError(
           "asset_store_unavailable",
@@ -366,7 +540,6 @@ export const createArtifactService = <
       if (!snapshot) {
         throw new ArtifactError("not_found", "Artifact revision not found");
       }
-      const timestamp = now();
 
       return saveRevision(
         {
@@ -375,12 +548,40 @@ export const createArtifactService = <
           content: options.registry.parse(current.kind, snapshot.content),
           metadata: snapshot.metadata,
           publication: undefined,
+          provenance: snapshot.provenance,
           revision: current.revision + 1,
           status: "draft",
           title: snapshot.title,
-          updatedAt: timestamp,
+          updatedAt: now(),
         },
         expectedRevision ?? current.revision,
+        "artifact.restored",
+        { restoredRevision: revision },
+      );
+    },
+    unpublish: async (ownerId: string, artifactId: string) => {
+      const current = await get(ownerId, artifactId);
+      requireCapability(current, "publish");
+      if (!options.publisher) {
+        throw new ArtifactError(
+          "publisher_unavailable",
+          "No artifact publisher is configured",
+        );
+      }
+      await options.publisher.unpublish(current, {
+        idempotencyKey: `artifact:${current.id}:unpublish:${current.revision + 1}`,
+      });
+
+      return saveRevision(
+        {
+          ...current,
+          publication: undefined,
+          revision: current.revision + 1,
+          status: "draft",
+          updatedAt: now(),
+        },
+        current.revision,
+        "artifact.unpublished",
       );
     },
     update: async (
@@ -390,11 +591,11 @@ export const createArtifactService = <
     ) => {
       const current = await get(ownerId, artifactId);
       requireCapability(current, "edit");
-      const expectedRevision = input.expectedRevision ?? current.revision;
-      const content =
-        input.content === undefined
-          ? current.content
-          : options.registry.parse(current.kind, input.content);
+      const nextRevision = current.revision + 1;
+      const publication =
+        current.publication?.mode === "live"
+          ? { ...current.publication, revision: nextRevision }
+          : current.publication;
 
       return saveRevision(
         {
@@ -403,14 +604,21 @@ export const createArtifactService = <
             input.assets === undefined
               ? current.assets
               : validateAssets(current.kind, input.assets),
-          content,
+          content:
+            input.content === undefined
+              ? current.content
+              : options.registry.parse(current.kind, input.content),
           metadata: input.metadata ?? current.metadata,
-          revision: current.revision + 1,
+          publication,
+          revision: nextRevision,
           title: input.title?.trim() || current.title,
           updatedAt: now(),
         },
-        expectedRevision,
+        input.expectedRevision ?? current.revision,
+        "artifact.revised",
       );
     },
   };
+
+  return service;
 };

@@ -13,6 +13,34 @@ export type ArtifactRAGUploadOptions = {
   includeStructuredContent?: boolean;
 };
 
+export type ArtifactRAGIndexTarget = {
+  index(
+    uploads: RAGDocumentUploadInput[],
+    context: { artifact: ArtifactRecord },
+  ): Promise<{ documentIds: string[] }>;
+  remove?(
+    documentIds: string[],
+    context: { artifact: ArtifactRecord },
+  ): Promise<void>;
+};
+
+export type ArtifactRAGIndexStateWriter = {
+  getIndexingState(
+    ownerId: string,
+    artifactId: string,
+  ): Promise<{ documentIds: string[] } | null>;
+  markIndexing(
+    ownerId: string,
+    artifactId: string,
+    input: {
+      documentIds?: string[];
+      error?: string;
+      revision: number;
+      status: "failed" | "indexed" | "pending" | "stale";
+    },
+  ): Promise<unknown>;
+};
+
 const artifactMetadata = (artifact: ArtifactRecord) => ({
   artifactId: artifact.id,
   artifactKind: artifact.kind,
@@ -65,3 +93,47 @@ export const artifactToRAGUploads = async (
     ...uploads,
   ];
 };
+
+export const createArtifactRAGIndexCoordinator = (options: {
+  reader: ArtifactRAGAssetReader;
+  service: ArtifactRAGIndexStateWriter;
+  target: ArtifactRAGIndexTarget;
+}) => ({
+  index: async (artifact: ArtifactRecord) => {
+    const previous = await options.service.getIndexingState(
+      artifact.ownerId,
+      artifact.id,
+    );
+    await options.service.markIndexing(artifact.ownerId, artifact.id, {
+      documentIds: previous?.documentIds,
+      revision: artifact.revision,
+      status: "pending",
+    });
+    try {
+      const uploads = await artifactToRAGUploads(artifact, options.reader);
+      const indexed = await options.target.index(uploads, { artifact });
+      if (previous?.documentIds.length && options.target.remove) {
+        await options.target.remove(previous.documentIds, { artifact });
+      }
+      await options.service.markIndexing(artifact.ownerId, artifact.id, {
+        documentIds: indexed.documentIds,
+        revision: artifact.revision,
+        status: "indexed",
+      });
+
+      return indexed;
+    } catch (error) {
+      await options.service.markIndexing(artifact.ownerId, artifact.id, {
+        documentIds: previous?.documentIds,
+        error: error instanceof Error ? error.message : String(error),
+        revision: artifact.revision,
+        status: "failed",
+      });
+      throw error;
+    }
+  },
+});
+
+export type ArtifactRAGIndexCoordinator = ReturnType<
+  typeof createArtifactRAGIndexCoordinator
+>;

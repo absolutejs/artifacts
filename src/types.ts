@@ -12,15 +12,31 @@ export type ArtifactCapability =
   | "refine";
 
 export type ArtifactProvenance = {
+  lineage?: ArtifactLineageReference[];
   model?: string;
   sourceIds?: string[];
   tool?: string;
   traceId?: string;
 };
 
+export type ArtifactLineageRelation =
+  | "derived_from"
+  | "generated_from"
+  | "references"
+  | "replaces";
+
+export type ArtifactLineageReference = {
+  artifactId?: string;
+  relation: ArtifactLineageRelation;
+  revision?: number;
+  sourceId?: string;
+};
+
 export type ArtifactPublication = {
   id: string;
+  mode: "live" | "pinned";
   publishedAt: string;
+  revision: number;
   url: string;
 };
 
@@ -32,6 +48,7 @@ export type ArtifactAssetReference = {
     value: string;
   };
   id: string;
+  createdAt: string;
   mediaType: string;
   metadata?: Record<string, unknown>;
   name: string;
@@ -68,6 +85,50 @@ export type ArtifactRecord<TContent = unknown> = {
   updatedAt: string;
 };
 
+export const ARTIFACT_EVENT_TYPES = [
+  "artifact.archived",
+  "artifact.asset_attached",
+  "artifact.asset_detached",
+  "artifact.created",
+  "artifact.generated",
+  "artifact.indexing_changed",
+  "artifact.published",
+  "artifact.restored",
+  "artifact.revised",
+  "artifact.unpublished",
+] as const;
+
+export type ArtifactEventType = (typeof ARTIFACT_EVENT_TYPES)[number];
+
+export type ArtifactEvent = {
+  artifactId: string;
+  createdAt: string;
+  id: string;
+  ownerId: string;
+  payload?: Record<string, unknown>;
+  processedAt?: string;
+  revision: number;
+  type: ArtifactEventType;
+};
+
+export type ArtifactEventQuery = {
+  limit?: number;
+  processed?: boolean;
+  type?: ArtifactEventType;
+};
+
+export type ArtifactIndexingStatus = "failed" | "indexed" | "pending" | "stale";
+
+export type ArtifactIndexingState = {
+  artifactId: string;
+  documentIds: string[];
+  error?: string;
+  indexedAt?: string;
+  revision: number;
+  status: ArtifactIndexingStatus;
+  updatedAt: string;
+};
+
 /** An immutable point-in-time copy of an artifact record. */
 export type ArtifactRevision<TContent = unknown> = Readonly<
   ArtifactRecord<TContent>
@@ -97,9 +158,29 @@ export type ArtifactUpdateInput = {
   title?: string;
 };
 
+export type ArtifactBundleCreateInput = Omit<ArtifactCreateInput, "assets"> & {
+  assets?: ArtifactAssetWriteInput[];
+};
+
+export type ArtifactPublishInput = {
+  mode?: "live" | "pinned";
+};
+
+export type ArtifactRetentionCandidate = {
+  createdAt: string;
+  reference: ArtifactAssetReference;
+};
+
+export type ArtifactGarbageCollectionResult = {
+  deleted: ArtifactAssetReference[];
+  retained: ArtifactAssetReference[];
+};
+
 export type ArtifactErrorCode =
   | "asset_store_unavailable"
+  | "asset_transaction_unavailable"
   | "conflict"
+  | "generator_unavailable"
   | "invalid_content"
   | "not_found"
   | "publisher_unavailable"

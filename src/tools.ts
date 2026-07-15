@@ -110,13 +110,18 @@ export const createArtifactTools = (
         return "Provide artifactId and published.";
       }
       const artifact = input.published
-        ? await options.service.publish(options.ownerId, artifactId)
+        ? await options.service.publish(options.ownerId, artifactId, {
+            mode: input.mode === "live" ? "live" : "pinned",
+          })
         : await options.service.unpublish(options.ownerId, artifactId);
 
       return JSON.stringify(artifact);
     },
     input: Type.Object({
       artifactId: Type.String({ minLength: 1 }),
+      mode: Type.Optional(
+        Type.Union([Type.Literal("live"), Type.Literal("pinned")]),
+      ),
       published: Type.Boolean(),
     }),
   },
