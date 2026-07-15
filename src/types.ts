@@ -3,6 +3,7 @@ export const ARTIFACT_STATUSES = ["draft", "published", "archived"] as const;
 export type ArtifactStatus = (typeof ARTIFACT_STATUSES)[number];
 
 export type ArtifactCapability =
+  | "attach"
   | "archive"
   | "edit"
   | "export"
@@ -23,7 +24,33 @@ export type ArtifactPublication = {
   url: string;
 };
 
+export type ArtifactAssetRole = "attachment" | "primary" | "preview" | "source";
+
+export type ArtifactAssetReference = {
+  checksum?: {
+    algorithm: "sha256";
+    value: string;
+  };
+  id: string;
+  mediaType: string;
+  metadata?: Record<string, unknown>;
+  name: string;
+  role: ArtifactAssetRole;
+  size: number;
+  /** Opaque host storage locator. It is not required to be publicly fetchable. */
+  uri: string;
+};
+
+export type ArtifactAssetWriteInput = {
+  data: Uint8Array;
+  mediaType: string;
+  metadata?: Record<string, unknown>;
+  name: string;
+  role?: ArtifactAssetRole;
+};
+
 export type ArtifactRecord<TContent = unknown> = {
+  assets: ArtifactAssetReference[];
   capabilities: ArtifactCapability[];
   content: TContent;
   createdAt: string;
@@ -41,6 +68,11 @@ export type ArtifactRecord<TContent = unknown> = {
   updatedAt: string;
 };
 
+/** An immutable point-in-time copy of an artifact record. */
+export type ArtifactRevision<TContent = unknown> = Readonly<
+  ArtifactRecord<TContent>
+>;
+
 export type ArtifactListQuery = {
   kind?: string;
   limit?: number;
@@ -48,6 +80,7 @@ export type ArtifactListQuery = {
 };
 
 export type ArtifactCreateInput = {
+  assets?: ArtifactAssetReference[];
   content: unknown;
   createdBy: string;
   kind: string;
@@ -57,6 +90,7 @@ export type ArtifactCreateInput = {
 };
 
 export type ArtifactUpdateInput = {
+  assets?: ArtifactAssetReference[];
   content?: unknown;
   expectedRevision?: number;
   metadata?: Record<string, unknown>;
@@ -64,6 +98,7 @@ export type ArtifactUpdateInput = {
 };
 
 export type ArtifactErrorCode =
+  | "asset_store_unavailable"
   | "conflict"
   | "invalid_content"
   | "not_found"

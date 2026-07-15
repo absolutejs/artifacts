@@ -14,11 +14,15 @@ routes, authorization, UI, or hosting.
 
 - Structured artifact-kind schemas and runtime validation
 - Draft, published, and archived lifecycle states
-- Optimistic revisions that prevent lost edits
-- Storage, renderer, and publisher interfaces
-- An in-memory store for development and tests
+- Immutable revision history, restoration, and optimistic updates
+- Structured content plus opaque references to generated or source files
+- Artifact, asset, renderer, and publisher storage interfaces
+- In-memory artifact and asset stores for development and tests
 - Owner-bound lifecycle tools structurally compatible with AI tool maps
 - Provenance fields for model, tool, trace, and source entities
+- Standard file-backed kinds for documents, presentations, spreadsheets,
+  datasets, code, images, audio, video, email, archives, and generic files
+- An optional bridge to `@absolutejs/rag` ingestion
 
 Your application retains authorization, durable persistence, public tokens,
 URLs, notifications, analytics, submissions, and product-specific rendering.
@@ -29,6 +33,7 @@ URLs, notifications, analytics, submissions, and product-specific rendering.
 import { Type } from "@sinclair/typebox";
 import {
   createArtifactService,
+  createMemoryArtifactAssetStore,
   createMemoryArtifactStore,
   defineArtifactRegistry,
 } from "@absolutejs/artifacts";
@@ -51,6 +56,7 @@ const registry = defineArtifactRegistry({
 });
 
 const artifacts = createArtifactService({
+  assetStore: createMemoryArtifactAssetStore(),
   registry,
   store: createMemoryArtifactStore(),
 });
@@ -65,6 +71,70 @@ const page = await artifacts.create("owner-123", {
   provenance: { model: "your-model", tool: "create_page" },
   title: "Launch page",
 });
+```
+
+Every successful create or lifecycle mutation appends an immutable snapshot.
+Restoring history creates a new private draft instead of rewriting or
+republishing an old revision:
+
+```ts
+const history = await artifacts.listRevisions("owner-123", page.id);
+const restored = await artifacts.restore("owner-123", page.id, 1);
+```
+
+## File-backed artifact kinds
+
+Use the bundled definitions directly or compose them with application-specific
+kinds:
+
+```ts
+import {
+  defineArtifactRegistry,
+  standardArtifactDefinitions,
+} from "@absolutejs/artifacts";
+
+const registry = defineArtifactRegistry({
+  ...standardArtifactDefinitions,
+  page: myPageDefinition,
+});
+```
+
+File bytes stay in host storage. Artifact records retain opaque references with
+name, media type, size, checksum, role, and storage URI. The URI is not treated
+as a public URL and the package reads it only through the configured asset
+store. Detaching a file does not delete its bytes because older immutable
+revisions may still reference it.
+
+```ts
+const report = await artifacts.create("owner-123", {
+  content: { summary: "Quarterly results" },
+  createdBy: "agent",
+  kind: "document",
+  title: "Q3 report",
+});
+
+await artifacts.attach("owner-123", report.id, {
+  data: pdfBytes,
+  mediaType: "application/pdf",
+  name: "q3-report.pdf",
+  role: "primary",
+});
+```
+
+## RAG ingestion
+
+The optional `@absolutejs/artifacts/rag` entry point resolves one current or
+historical artifact record into the upload contract already accepted by
+`@absolutejs/rag`. Structured content is included as JSON and every attached
+file is included without exposing its storage URI:
+
+```ts
+import { artifactToRAGUploads } from "@absolutejs/artifacts/rag";
+import { buildRAGUpsertInputFromUploads } from "@absolutejs/rag";
+
+const revision = await artifacts.getRevision("owner-123", report.id, 2);
+const uploads = await artifactToRAGUploads(revision, assetStore);
+const upsert = await buildRAGUpsertInputFromUploads({ uploads });
 ```
 
 ## Compose publishing and rendering

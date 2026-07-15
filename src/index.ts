@@ -15,6 +15,10 @@ export {
   type ArtifactRegistry,
 } from "./registry";
 export {
+  STANDARD_ARTIFACT_KIND_NAMES,
+  standardArtifactDefinitions,
+} from "./standardKinds";
+export {
   createArtifactRendererRegistry,
   type ArtifactRenderer,
   type ArtifactRendererRegistry,
@@ -26,7 +30,12 @@ export {
   type ArtifactService,
   type ArtifactServiceOptions,
 } from "./service";
-export { createMemoryArtifactStore, type ArtifactStore } from "./store";
+export {
+  createMemoryArtifactStore,
+  createMemoryArtifactAssetStore,
+  type ArtifactAssetStore,
+  type ArtifactStore,
+} from "./store";
 export {
   createArtifactTools,
   type ArtifactToolDefinition,
@@ -36,6 +45,9 @@ export {
 export {
   ARTIFACT_STATUSES,
   ArtifactError,
+  type ArtifactAssetReference,
+  type ArtifactAssetRole,
+  type ArtifactAssetWriteInput,
   type ArtifactCapability,
   type ArtifactCreateInput,
   type ArtifactErrorCode,
@@ -43,6 +55,7 @@ export {
   type ArtifactProvenance,
   type ArtifactPublication,
   type ArtifactRecord,
+  type ArtifactRevision,
   type ArtifactStatus,
   type ArtifactUpdateInput,
 } from "./types";

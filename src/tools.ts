@@ -87,6 +87,19 @@ export const createArtifactTools = (
       ),
     }),
   },
+  artifact_history: {
+    annotations: { readOnlyHint: true },
+    description: "List the immutable revisions of one owned artifact.",
+    handler: async (raw) => {
+      const artifactId = stringValue(record(raw), "artifactId");
+      if (!artifactId) return "Provide artifactId.";
+
+      return JSON.stringify(
+        await options.service.listRevisions(options.ownerId, artifactId),
+      );
+    },
+    input: Type.Object({ artifactId: Type.String({ minLength: 1 }) }),
+  },
   artifact_publish: {
     description:
       "Publish or unpublish an artifact. Hosts should expose this tool only when the user explicitly controls public access.",
@@ -105,6 +118,33 @@ export const createArtifactTools = (
     input: Type.Object({
       artifactId: Type.String({ minLength: 1 }),
       published: Type.Boolean(),
+    }),
+  },
+  artifact_restore: {
+    description:
+      "Restore an immutable artifact revision as a new private draft revision.",
+    handler: async (raw) => {
+      const input = record(raw);
+      const artifactId = stringValue(input, "artifactId");
+      if (!artifactId || typeof input.revision !== "number") {
+        return "Provide artifactId and revision.";
+      }
+
+      return JSON.stringify(
+        await options.service.restore(
+          options.ownerId,
+          artifactId,
+          input.revision,
+          typeof input.expectedRevision === "number"
+            ? input.expectedRevision
+            : undefined,
+        ),
+      );
+    },
+    input: Type.Object({
+      artifactId: Type.String({ minLength: 1 }),
+      expectedRevision: Type.Optional(Type.Integer({ minimum: 1 })),
+      revision: Type.Integer({ minimum: 1 }),
     }),
   },
   artifact_update: {

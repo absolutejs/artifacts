@@ -49,6 +49,26 @@ export const manifest = defineManifest<
         ownerId: Type.String({ minLength: 1 }),
       }),
     }),
+    artifact_history: tool.runtime({
+      annotations: { readOnlyHint: true },
+      description: "List immutable revisions of one artifact owned by a user.",
+      handler: async ({ artifactId, ownerId }, service) =>
+        JSON.stringify(await service.listRevisions(ownerId, artifactId)),
+      input: Type.Object({
+        artifactId: Type.String({ minLength: 1 }),
+        ownerId: Type.String({ minLength: 1 }),
+      }),
+    }),
+    artifact_restore: tool.runtime({
+      description: "Restore an old artifact revision as a new private draft.",
+      handler: async ({ artifactId, ownerId, revision }, service) =>
+        JSON.stringify(await service.restore(ownerId, artifactId, revision)),
+      input: Type.Object({
+        artifactId: Type.String({ minLength: 1 }),
+        ownerId: Type.String({ minLength: 1 }),
+        revision: Type.Integer({ minimum: 1 }),
+      }),
+    }),
   },
   wiring: [
     {

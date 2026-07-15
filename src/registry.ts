@@ -2,7 +2,14 @@ import type { Static, TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { ArtifactError, type ArtifactCapability } from "./types";
 
+export type ArtifactAssetPolicy = {
+  /** Exact media types or wildcards such as image/* and application/*. */
+  acceptedMediaTypes?: string[];
+  maxCount?: number;
+};
+
 export type ArtifactKindDefinition<TContent extends TSchema = TSchema> = {
+  assets?: ArtifactAssetPolicy;
   capabilities?: ArtifactCapability[];
   content: TContent;
   description?: string;

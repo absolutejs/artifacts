@@ -1,6 +1,6 @@
 {
   "name": "@absolutejs/artifacts",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Typed, versioned artifacts for AI products — schemas, lifecycle, storage, rendering, publishing, revisions, and agent tools without prescribing a database or host.",
   "author": "Alex Kahn",
   "license": "BUSL-1.1",
@@ -21,7 +21,7 @@
     "url": "https://github.com/absolutejs/artifacts/issues"
   },
   "scripts": {
-    "build": "rm -rf dist && bun build src/index.ts src/manifest.ts --outdir dist --root ./src --target=bun --external @sinclair/typebox --external @sinclair/typebox/value && tsc --emitDeclarationOnly --project tsconfig.json && absolute-manifest emit",
+    "build": "rm -rf dist && bun build src/index.ts src/manifest.ts src/rag.ts --outdir dist --root ./src --target=bun --external @absolutejs/rag --external @sinclair/typebox --external @sinclair/typebox/value && tsc --emitDeclarationOnly --project tsconfig.json && absolute-manifest emit",
     "format": "prettier --write \"./**/*.{ts,json,md}\"",
     "release": "bun run format && bun run test && bun run build && bun publish",
     "test": "bun test",
@@ -44,13 +44,27 @@
       "import": "./dist/manifest.js",
       "default": "./dist/manifest.js"
     },
-    "./manifest.json": "./dist/manifest.json"
+    "./manifest.json": "./dist/manifest.json",
+    "./rag": {
+      "types": "./dist/src/rag.d.ts",
+      "import": "./dist/rag.js",
+      "default": "./dist/rag.js"
+    }
   },
   "dependencies": {
     "@absolutejs/manifest": "^0.1.0",
     "@sinclair/typebox": "^0.34.0"
   },
+  "peerDependencies": {
+    "@absolutejs/rag": ">=0.0.29"
+  },
+  "peerDependenciesMeta": {
+    "@absolutejs/rag": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@absolutejs/rag": "0.0.29",
     "@types/bun": "latest",
     "prettier": "3.5.3",
     "typescript": "5.8.3"
