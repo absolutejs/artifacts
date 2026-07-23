@@ -1,6 +1,6 @@
 {
   "name": "@absolutejs/artifacts",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Typed, versioned artifacts for AI products — schemas, lifecycle, storage, rendering, publishing, revisions, and agent tools without prescribing a database or host.",
   "author": "Alex Kahn",
   "license": "BUSL-1.1",
@@ -31,7 +31,7 @@
     "access": "public"
   },
   "absolutejs": {
-    "manifestContract": 1
+    "manifestContract": 2
   },
   "exports": {
     ".": {
@@ -52,7 +52,7 @@
     }
   },
   "dependencies": {
-    "@absolutejs/manifest": "^0.1.0",
+    "@absolutejs/manifest": "^0.4.0",
     "@sinclair/typebox": "^0.34.0"
   },
   "peerDependencies": {

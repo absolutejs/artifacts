@@ -5,7 +5,7 @@
     "": {
       "name": "@absolutejs/artifacts",
       "dependencies": {
-        "@absolutejs/manifest": "^0.1.0",
+        "@absolutejs/manifest": "^0.4.0",
         "@sinclair/typebox": "^0.34.0",
       },
       "devDependencies": {
@@ -27,7 +27,7 @@
 
     "@absolutejs/linked-providers": ["@absolutejs/linked-providers@0.0.2", "", {}, "sha512-MNUIQBzUFWIqsrC33PO8YpWzT8tW0S3QWpcLZuLrt+nhyffU8w8aDNni/6jrGh36WGqauHWIsaz2gn7hLS+5Sw=="],
 
-    "@absolutejs/manifest": ["@absolutejs/manifest@0.1.1", "", { "peerDependencies": { "@sinclair/typebox": "^0.34.0" }, "bin": { "absolute-manifest": "dist/cli.js" } }, "sha512-4ucQdW26675CDwiG+umrjb8+RlaQGtNMdqXAcLTZTKhN0XudVJpwdU8yzhuFljEOvU/HuOlzZaIVVCsmCPKNqg=="],
+    "@absolutejs/manifest": ["@absolutejs/manifest@0.4.0", "", { "peerDependencies": { "@sinclair/typebox": "^0.34.0" }, "bin": { "absolute-manifest": "dist/cli.js" } }, "sha512-hhgUMB2Q9+m2BxL7D9fITQfCtYJTwA1IC1jZIFFvz6ESUz4FV2OlvR8q95Dk3xn+TVrSihTitia9VIXD2hD5QA=="],
 
     "@absolutejs/rag": ["@absolutejs/rag@0.0.29", "", { "dependencies": { "@absolutejs/ai": "^0.0.19", "@absolutejs/linked-providers": "0.0.2", "@absolutejs/manifest": "^0.1.0", "@absolutejs/sync": "^1.8.1", "@sinclair/typebox": "^0.34.0" }, "peerDependencies": { "@angular/core": "^21.0.0", "elysia": "^1.4.18", "react": "^19.2.0", "svelte": "^5.35.2", "vue": "^3.5.27" }, "optionalPeers": ["@angular/core", "react", "svelte", "vue"] }, "sha512-AUvzl32kKrOVfPDRuSoUtksxYDzAXtqkAV6FOlpKOEkDEbjBSSySV9aKjn98/ParbUmRopETltta7z95+7w/Og=="],
 
@@ -82,5 +82,7 @@
     "undici-types": ["undici-types@8.3.0", "", {}, "sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ=="],
 
     "@absolutejs/ai/@absolutejs/sync": ["@absolutejs/sync@0.7.0", "", { "peerDependencies": { "@angular/core": ">= 21.0.0", "@elysiajs/cron": ">= 1.4.0", "drizzle-orm": ">= 0.44.0", "elysia": ">= 1.4.26", "react": ">= 19.0.0", "svelte": ">= 5.0.0", "vue": ">= 3.5.0" }, "optionalPeers": ["@angular/core", "@elysiajs/cron", "drizzle-orm", "elysia", "react", "svelte", "vue"] }, "sha512-Emc4mQBikyctrS+7F/TwZpo1O4RBshkrnFSOjUc+Bf5C8zBAN2A19gTMlUrLx4pqS1DO2hQTPpUw6nODNTPSkQ=="],
+
+    "@absolutejs/rag/@absolutejs/manifest": ["@absolutejs/manifest@0.1.1", "", { "peerDependencies": { "@sinclair/typebox": "^0.34.0" }, "bin": { "absolute-manifest": "dist/cli.js" } }, "sha512-4ucQdW26675CDwiG+umrjb8+RlaQGtNMdqXAcLTZTKhN0XudVJpwdU8yzhuFljEOvU/HuOlzZaIVVCsmCPKNqg=="],
   }
 }

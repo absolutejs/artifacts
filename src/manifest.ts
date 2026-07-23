@@ -8,7 +8,7 @@ export const manifest = defineManifest<
   Record<string, never>,
   ArtifactService
 >()({
-  contract: 1,
+  contract: 2,
   identity: {
     accent: "#8b5cf6",
     category: "ai",
@@ -31,6 +31,17 @@ export const manifest = defineManifest<
   tools: {
     artifact_get: tool.runtime({
       annotations: { readOnlyHint: true },
+      authorization: {
+        approval: "never",
+        audience: "owner",
+        effects: ["read"],
+        requiredScopes: ["artifacts:read"],
+        resource: {
+          idField: "artifactId",
+          ownerIdField: "ownerId",
+          type: "artifact",
+        },
+      },
       description: "Open one artifact owned by a user.",
       handler: async ({ artifactId, ownerId }, service) =>
         JSON.stringify(await service.get(ownerId, artifactId)),
@@ -41,6 +52,13 @@ export const manifest = defineManifest<
     }),
     artifact_list: tool.runtime({
       annotations: { readOnlyHint: true },
+      authorization: {
+        approval: "never",
+        audience: "owner",
+        effects: ["read"],
+        requiredScopes: ["artifacts:read"],
+        resource: { ownerIdField: "ownerId", type: "artifact" },
+      },
       description: "List artifacts owned by a user.",
       handler: async ({ kind, ownerId }, service) =>
         JSON.stringify(await service.list(ownerId, { kind })),
@@ -51,6 +69,17 @@ export const manifest = defineManifest<
     }),
     artifact_history: tool.runtime({
       annotations: { readOnlyHint: true },
+      authorization: {
+        approval: "never",
+        audience: "owner",
+        effects: ["read"],
+        requiredScopes: ["artifacts:read"],
+        resource: {
+          idField: "artifactId",
+          ownerIdField: "ownerId",
+          type: "artifact-revision",
+        },
+      },
       description: "List immutable revisions of one artifact owned by a user.",
       handler: async ({ artifactId, ownerId }, service) =>
         JSON.stringify(await service.listRevisions(ownerId, artifactId)),
@@ -60,6 +89,19 @@ export const manifest = defineManifest<
       }),
     }),
     artifact_restore: tool.runtime({
+      authorization: {
+        approval: "policy",
+        audience: "owner",
+        effects: ["write"],
+        idempotency: { mode: "host" },
+        requiredScopes: ["artifacts:write"],
+        resource: {
+          idField: "artifactId",
+          ownerIdField: "ownerId",
+          type: "artifact-revision",
+        },
+        reversible: false,
+      },
       description: "Restore an old artifact revision as a new private draft.",
       handler: async ({ artifactId, ownerId, revision }, service) =>
         JSON.stringify(await service.restore(ownerId, artifactId, revision)),
