@@ -205,4 +205,36 @@ describe("createDrizzleArtifactStore", () => {
     ).rejects.toThrow("must belong");
     expect(await store.get("owner-1", "unsafe-artifact")).toBeNull();
   });
+
+  test("purges an owner's complete lifecycle without touching another owner", async () => {
+    const { service, store } = await createFixture();
+    await service.create("owner-1", {
+      content: { body: "Delete me" },
+      createdBy: "agent-1",
+      kind: "page",
+      title: "Deleted page",
+    });
+    await store.create({
+      assets: [],
+      capabilities: ["edit"],
+      content: { body: "Keep me" },
+      createdAt: "2026-07-23T12:00:00.000Z",
+      createdBy: "agent-2",
+      id: "artifact-2",
+      kind: "page",
+      metadata: {},
+      ownerId: "owner-2",
+      revision: 1,
+      schemaVersion: 1,
+      status: "draft",
+      title: "Retained page",
+      updatedAt: "2026-07-23T12:00:00.000Z",
+    });
+
+    expect(await service.purgeOwner("owner-1")).toBe(1);
+    expect(await store.get("owner-1", "artifact-1")).toBeNull();
+    expect(await store.listRevisions("owner-1", "artifact-1")).toEqual([]);
+    expect(await store.listEvents()).toEqual([]);
+    expect(await store.get("owner-2", "artifact-2")).not.toBeNull();
+  });
 });

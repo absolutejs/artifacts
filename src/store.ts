@@ -60,6 +60,8 @@ export type ArtifactStore = {
     state: ArtifactIndexingState,
     events?: ArtifactEvent[],
   ): Promise<void>;
+  /** Permanently remove every artifact and lifecycle row for one host owner. */
+  purgeOwner(ownerId: string): Promise<number>;
   /** Compare, replace current state, and append its revision atomically. */
   save(
     record: ArtifactRecord,
@@ -255,6 +257,20 @@ export const createMemoryArtifactStore = (
       }
       indexing.set(state.artifactId, clone(state));
       for (const event of newEvents) events.set(event.id, clone(event));
+    },
+    purgeOwner: async (ownerId) => {
+      const artifactIds = [...records.values()]
+        .filter((record) => record.ownerId === ownerId)
+        .map((record) => record.id);
+      for (const artifactId of artifactIds) {
+        records.delete(artifactId);
+        revisions.delete(artifactId);
+        indexing.delete(artifactId);
+      }
+      for (const [eventId, event] of events)
+        if (event.ownerId === ownerId) events.delete(eventId);
+
+      return artifactIds.length;
     },
     save: async (record, expectedRevision, newEvents = []) => {
       const current = records.get(record.id);

@@ -387,6 +387,24 @@ export const createDrizzleArtifactStore = <DB extends AnyPgDatabase>(options: {
       if (events.length > 0)
         await transaction.insert(artifactEvents).values(eventRows(events));
     }),
+  purgeOwner: (ownerId) =>
+    options.db.transaction(async (transaction) => {
+      await transaction
+        .delete(artifactIndexingStates)
+        .where(eq(artifactIndexingStates.ownerId, ownerId));
+      await transaction
+        .delete(artifactEvents)
+        .where(eq(artifactEvents.ownerId, ownerId));
+      await transaction
+        .delete(artifactRevisions)
+        .where(eq(artifactRevisions.ownerId, ownerId));
+      const deleted = await transaction
+        .delete(artifactRecords)
+        .where(eq(artifactRecords.ownerId, ownerId))
+        .returning({ id: artifactRecords.id });
+
+      return deleted.length;
+    }),
   save: (record, expectedRevision, events = []) =>
     options.db.transaction(async (transaction) => {
       assertEventsBelongToArtifact(record, events);

@@ -108,6 +108,11 @@ normal migration workflow owns the four tables. Insert and select TypeBoxes
 generated directly from those tables are exported from the same entry point;
 hosts should reuse them instead of redefining database row schemas.
 
+When a host owner is permanently deleted, call `artifacts.purgeOwner(ownerId)`.
+The production store removes its current records, revisions, indexing state,
+and outbox events in one transaction; orphaned asset bytes remain subject to
+the package's history-aware garbage collector.
+
 ## File-backed artifact kinds
 
 Use the bundled definitions directly or compose them with application-specific

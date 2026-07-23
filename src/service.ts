@@ -524,6 +524,7 @@ export const createArtifactService = <
         data: await options.assetStore.read(asset, { artifact }),
       };
     },
+    purgeOwner: (ownerId: string) => options.store.purgeOwner(ownerId),
     restore: async (
       ownerId: string,
       artifactId: string,
