@@ -1,6 +1,6 @@
 {
   "name": "@absolutejs/artifacts",
-  "version": "0.0.5",
+  "version": "0.1.0",
   "description": "Typed, versioned artifacts for AI products — schemas, lifecycle, storage, rendering, publishing, revisions, and agent tools without prescribing a database or host.",
   "author": "Alex Kahn",
   "license": "BUSL-1.1",
@@ -21,7 +21,7 @@
     "url": "https://github.com/absolutejs/artifacts/issues"
   },
   "scripts": {
-    "build": "rm -rf dist && bun build src/index.ts src/manifest.ts src/rag.ts --outdir dist --root ./src --target=bun --external @absolutejs/rag --external @sinclair/typebox --external @sinclair/typebox/value && tsc --emitDeclarationOnly --project tsconfig.json && absolute-manifest emit",
+    "build": "rm -rf dist && bun build src/index.ts src/drizzle.ts src/manifest.ts src/rag.ts --outdir dist --root ./src --target=bun --external @absolutejs/rag --external @sinclair/typebox --external @sinclair/typebox/value --external drizzle-orm --external 'drizzle-orm/*' --external drizzle-typebox && tsc --emitDeclarationOnly --project tsconfig.json && absolute-manifest emit",
     "format": "prettier --write \"./**/*.{ts,json,md}\"",
     "release": "bun run format && bun run test && bun run build && bun publish",
     "test": "bun test",
@@ -45,6 +45,11 @@
       "default": "./dist/manifest.js"
     },
     "./manifest.json": "./dist/manifest.json",
+    "./drizzle": {
+      "types": "./dist/src/drizzle.d.ts",
+      "import": "./dist/drizzle.js",
+      "default": "./dist/drizzle.js"
+    },
     "./rag": {
       "types": "./dist/src/rag.d.ts",
       "import": "./dist/rag.js",
@@ -53,19 +58,26 @@
   },
   "dependencies": {
     "@absolutejs/manifest": "^0.4.0",
-    "@sinclair/typebox": "^0.34.0"
+    "@sinclair/typebox": "^0.34.0",
+    "drizzle-typebox": "1.0.0-beta.14-a36c63d"
   },
   "peerDependencies": {
-    "@absolutejs/rag": ">=0.0.29"
+    "@absolutejs/rag": ">=0.0.29",
+    "drizzle-orm": ">=1.0.0-rc.4 <2"
   },
   "peerDependenciesMeta": {
     "@absolutejs/rag": {
+      "optional": true
+    },
+    "drizzle-orm": {
       "optional": true
     }
   },
   "devDependencies": {
     "@absolutejs/rag": "0.0.29",
+    "@electric-sql/pglite": "0.3.14",
     "@types/bun": "latest",
+    "drizzle-orm": "1.0.0-rc.4",
     "prettier": "3.5.3",
     "typescript": "5.8.3"
   }

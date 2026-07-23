@@ -87,6 +87,27 @@ const history = await artifacts.listRevisions("owner-123", page.id);
 const restored = await artifacts.restore("owner-123", page.id, 1);
 ```
 
+## Production persistence
+
+Use the package-owned Drizzle schema on PostgreSQL, including Neon. The store
+atomically writes the current artifact, immutable revision, and lifecycle
+outbox events. It also persists per-revision indexing state and fences every
+artifact read and mutation by owner.
+
+```ts
+import {
+  artifactDrizzleSchema,
+  createDrizzleArtifactStore,
+} from "@absolutejs/artifacts/drizzle";
+
+const store = createDrizzleArtifactStore({ db });
+```
+
+Export `artifactDrizzleSchema` from your application's Drizzle schema so its
+normal migration workflow owns the four tables. Insert and select TypeBoxes
+generated directly from those tables are exported from the same entry point;
+hosts should reuse them instead of redefining database row schemas.
+
 ## File-backed artifact kinds
 
 Use the bundled definitions directly or compose them with application-specific

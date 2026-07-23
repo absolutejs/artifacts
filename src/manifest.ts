@@ -1,4 +1,8 @@
-import { defineManifest, toolFactory } from "@absolutejs/manifest";
+import {
+  defineImplementation,
+  defineManifest,
+  toolFactory,
+} from "@absolutejs/manifest";
 import { Type } from "@sinclair/typebox";
 import type { ArtifactService } from "./service";
 
@@ -18,13 +22,65 @@ export const manifest = defineManifest<
     name: "@absolutejs/artifacts",
     tagline: "Give everything your AI makes a real lifecycle.",
   },
+  implements: [
+    defineImplementation<never>()({
+      contract: "artifacts/store",
+      factory: "createMemoryArtifactStore",
+      from: "@absolutejs/artifacts",
+      title: "In memory (development only — history resets on restart)",
+      wiring: {
+        code: "createMemoryArtifactStore()",
+        imports: [
+          {
+            from: "@absolutejs/artifacts",
+            names: ["createMemoryArtifactStore"],
+          },
+        ],
+      },
+    }),
+    defineImplementation<never>()({
+      contract: "artifacts/store",
+      factory: "createDrizzleArtifactStore",
+      from: "@absolutejs/artifacts/drizzle",
+      requires: {
+        peers: [
+          {
+            name: "drizzle-orm",
+            range: ">=1.0.0-rc.4 <2",
+            reason:
+              "Typed artifact revisions, indexing state, and transactional outbox persistence",
+          },
+        ],
+        services: [
+          {
+            description: "Artifact lifecycle and revision database",
+            id: "postgres",
+          },
+        ],
+      },
+      title: "Drizzle Postgres (production, including Neon)",
+      wiring: {
+        code: "createDrizzleArtifactStore({ db })",
+        imports: [
+          {
+            from: "@absolutejs/artifacts/drizzle",
+            names: ["createDrizzleArtifactStore"],
+          },
+        ],
+      },
+    }),
+  ],
   settings: Type.Object({}),
   slots: {
-    service: {
+    store: {
       configPath: "$self",
-      contract: "artifacts/service",
-      description: "The host-configured artifact service",
-      known: [],
+      contract: "artifacts/store",
+      description:
+        "Where current artifacts, immutable revisions, indexing state, and transactional outbox events live",
+      known: [
+        "@absolutejs/artifacts#createMemoryArtifactStore",
+        "@absolutejs/artifacts#drizzle",
+      ],
       required: true,
     },
   },
@@ -127,7 +183,7 @@ export const manifest = defineManifest<
           "\t}",
           "});",
           "",
-          "const artifactStore = createMemoryArtifactStore();",
+          "const artifactStore = ${slot.store};",
           "const artifactService = createArtifactService({",
           "\tregistry: artifactRegistry,",
           "\tstore: artifactStore",
@@ -136,11 +192,7 @@ export const manifest = defineManifest<
         imports: [
           {
             from: "@absolutejs/artifacts",
-            names: [
-              "createArtifactService",
-              "createMemoryArtifactStore",
-              "defineArtifactRegistry",
-            ],
+            names: ["createArtifactService", "defineArtifactRegistry"],
           },
           { from: "@sinclair/typebox", names: ["Type"] },
         ],
