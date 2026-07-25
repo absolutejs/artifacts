@@ -1,6 +1,6 @@
 {
   "name": "@absolutejs/artifacts",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Typed, versioned artifacts for AI products — schemas, lifecycle, storage, rendering, publishing, revisions, and agent tools without prescribing a database or host.",
   "author": "Alex Kahn",
   "license": "BUSL-1.1",
@@ -31,7 +31,33 @@
     "access": "public"
   },
   "absolutejs": {
-    "manifestContract": 2
+    "manifestContract": 2,
+    "runtimePeers": {
+      "@absolutejs/rag": {
+        "artifactImports": [],
+        "artifactReferences": [],
+        "buildExternals": [
+          "@absolutejs/rag"
+        ],
+        "optional": true,
+        "range": ">=0.1.1 <0.2.0",
+        "tested": "0.1.1"
+      },
+      "drizzle-orm": {
+        "artifactImports": [
+          "drizzle-orm",
+          "drizzle-orm/pg-core"
+        ],
+        "artifactReferences": [],
+        "buildExternals": [
+          "drizzle-orm",
+          "drizzle-orm/*"
+        ],
+        "optional": true,
+        "range": ">=1.0.0-rc.4 <2",
+        "tested": "1.0.0-rc.4"
+      }
+    }
   },
   "exports": {
     ".": {
@@ -57,12 +83,12 @@
     }
   },
   "dependencies": {
-    "@absolutejs/manifest": "^0.4.0",
+    "@absolutejs/manifest": "^0.7.2",
     "@sinclair/typebox": "^0.34.0",
     "drizzle-typebox": "1.0.0-beta.14-a36c63d"
   },
   "peerDependencies": {
-    "@absolutejs/rag": ">=0.0.29",
+    "@absolutejs/rag": ">=0.1.1 <0.2.0",
     "drizzle-orm": ">=1.0.0-rc.4 <2"
   },
   "peerDependenciesMeta": {
@@ -74,11 +100,13 @@
     }
   },
   "devDependencies": {
-    "@absolutejs/rag": "0.0.29",
+    "@absolutejs/ai": "0.0.47",
+    "@absolutejs/rag": "0.1.1",
+    "@absolutejs/sync": "2.11.0",
     "@electric-sql/pglite": "0.3.14",
-    "@types/bun": "latest",
+    "@types/bun": "1.3.14",
     "drizzle-orm": "1.0.0-rc.4",
     "prettier": "3.5.3",
-    "typescript": "5.8.3"
+    "typescript": "5.9.3"
   }
 }
