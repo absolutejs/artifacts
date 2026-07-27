@@ -22,6 +22,51 @@ export const manifest = defineManifest<
     name: "@absolutejs/artifacts",
     tagline: "Give everything your AI makes a real lifecycle.",
   },
+  product: {
+    blocks: [
+      {
+        category: "content",
+        componentExport: "ArtifactWorkspace",
+        description:
+          "Browse a typed artifact, its lifecycle state, and immutable revision history.",
+        frameworks: ["react", "client"],
+        id: "artifact_workspace",
+        props: Type.Object({
+          artifactId: Type.String({ minLength: 1 }),
+          ownerId: Type.String({ minLength: 1 }),
+        }),
+        title: "Artifact workspace",
+      },
+    ],
+    dataSources: [
+      {
+        description:
+          "Owner-scoped typed artifacts with current state and immutable revisions.",
+        id: "artifacts",
+        operations: ["list", "detail"],
+        schema: Type.Object({
+          artifactId: Type.String(),
+          kind: Type.String(),
+          ownerId: Type.String(),
+          revision: Type.Integer(),
+        }),
+        title: "Artifacts",
+        tools: {
+          detail: "artifact_get",
+          list: "artifact_list",
+        },
+      },
+    ],
+    workflowActions: [
+      {
+        description:
+          "Restore an immutable artifact revision as a new private draft.",
+        id: "restore_artifact",
+        title: "Restore artifact revision",
+        tool: "artifact_restore",
+      },
+    ],
+  },
   implements: [
     defineImplementation<never>()({
       contract: "artifacts/store",

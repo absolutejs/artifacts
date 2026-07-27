@@ -1,6 +1,6 @@
 {
   "name": "@absolutejs/artifacts",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Typed, versioned artifacts for AI products — schemas, lifecycle, storage, rendering, publishing, revisions, and agent tools without prescribing a database or host.",
   "author": "Alex Kahn",
   "license": "BUSL-1.1",
@@ -83,7 +83,7 @@
     }
   },
   "dependencies": {
-    "@absolutejs/manifest": "^0.7.2",
+    "@absolutejs/manifest": "^0.8.0",
     "@sinclair/typebox": "^0.34.0",
     "drizzle-typebox": "1.0.0-beta.14-a36c63d"
   },
