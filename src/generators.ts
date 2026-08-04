@@ -4,11 +4,13 @@ import type {
   ArtifactBundleCreateInput,
   ArtifactProvenance,
   ArtifactRecord,
+  JsonObject,
+  JsonValue,
 } from "./types";
 
 export type ArtifactGenerationInput = {
   createdBy: string;
-  input?: Record<string, unknown>;
+  input?: JsonObject;
   kind: string;
   ownerId: string;
   prompt?: string;
@@ -21,8 +23,8 @@ export type ArtifactGenerationContext = {
 
 export type ArtifactGenerationResult = {
   assets?: ArtifactAssetWriteInput[];
-  content: unknown;
-  metadata?: Record<string, unknown>;
+  content: JsonValue;
+  metadata?: JsonObject;
   provenance?: ArtifactProvenance;
   title?: string;
   warnings?: string[];

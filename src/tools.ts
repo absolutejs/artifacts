@@ -1,6 +1,21 @@
 import { Type, type TSchema } from "@sinclair/typebox";
 import type { ArtifactService } from "./service";
-import { ARTIFACT_STATUSES } from "./types";
+import {
+  ARTIFACT_STATUSES,
+  isJsonValue,
+  type JsonObject,
+} from "./types";
+
+const JsonValueSchema = Type.Recursive((self) =>
+  Type.Union([
+    Type.String(),
+    Type.Number(),
+    Type.Boolean(),
+    Type.Null(),
+    Type.Array(self),
+    Type.Record(Type.String(), self),
+  ]),
+);
 
 export type ArtifactToolDefinition = {
   annotations?: { readOnlyHint?: boolean };
@@ -18,11 +33,14 @@ export type ArtifactToolOptions = {
 };
 
 const record = (input: unknown) =>
-  input && typeof input === "object" && !Array.isArray(input)
-    ? (input as Record<string, unknown>)
+  isJsonValue(input) &&
+  input !== null &&
+  typeof input === "object" &&
+  !Array.isArray(input)
+    ? input
     : {};
 
-const stringValue = (input: Record<string, unknown>, key: string) =>
+const stringValue = (input: JsonObject, key: string) =>
   typeof input[key] === "string" ? input[key] : undefined;
 
 export const createArtifactTools = (
@@ -35,7 +53,7 @@ export const createArtifactTools = (
       const input = record(raw);
       const kind = stringValue(input, "kind");
       const title = stringValue(input, "title");
-      if (!kind || !title || input.content === undefined) {
+      if (!kind || !title || !isJsonValue(input.content)) {
         return "Provide kind, title, and content.";
       }
       const artifact = await options.service.create(options.ownerId, {
@@ -48,7 +66,7 @@ export const createArtifactTools = (
       return JSON.stringify(artifact);
     },
     input: Type.Object({
-      content: Type.Unknown(),
+      content: JsonValueSchema,
       kind: Type.String({ minLength: 1 }),
       title: Type.String({ minLength: 1 }),
     }),

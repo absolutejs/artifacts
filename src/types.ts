@@ -1,5 +1,24 @@
 export const ARTIFACT_STATUSES = ["draft", "published", "archived"] as const;
 
+export type JsonPrimitive = boolean | null | number | string;
+export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
+export type JsonObject = { [key: string]: JsonValue };
+
+export function isJsonValue(value: unknown): value is JsonValue {
+  if (
+    value === null ||
+    typeof value === "boolean" ||
+    typeof value === "string"
+  ) {
+    return true;
+  }
+  if (typeof value === "number") return Number.isFinite(value);
+  if (Array.isArray(value)) return value.every(isJsonValue);
+  if (typeof value !== "object") return false;
+
+  return Object.values(value).every(isJsonValue);
+}
+
 export type ArtifactStatus = (typeof ARTIFACT_STATUSES)[number];
 
 export type ArtifactCapability =
@@ -50,7 +69,7 @@ export type ArtifactAssetReference = {
   id: string;
   createdAt: string;
   mediaType: string;
-  metadata?: Record<string, unknown>;
+  metadata?: JsonObject;
   name: string;
   role: ArtifactAssetRole;
   size: number;
@@ -61,12 +80,12 @@ export type ArtifactAssetReference = {
 export type ArtifactAssetWriteInput = {
   data: Uint8Array;
   mediaType: string;
-  metadata?: Record<string, unknown>;
+  metadata?: JsonObject;
   name: string;
   role?: ArtifactAssetRole;
 };
 
-export type ArtifactRecord<TContent = unknown> = {
+export type ArtifactRecord<TContent = JsonValue> = {
   assets: ArtifactAssetReference[];
   capabilities: ArtifactCapability[];
   content: TContent;
@@ -74,7 +93,7 @@ export type ArtifactRecord<TContent = unknown> = {
   createdBy: string;
   id: string;
   kind: string;
-  metadata: Record<string, unknown>;
+  metadata: JsonObject;
   ownerId: string;
   provenance?: ArtifactProvenance;
   publication?: ArtifactPublication;
@@ -105,7 +124,7 @@ export type ArtifactEvent = {
   createdAt: string;
   id: string;
   ownerId: string;
-  payload?: Record<string, unknown>;
+  payload?: JsonObject;
   processedAt?: string;
   revision: number;
   type: ArtifactEventType;
@@ -130,7 +149,7 @@ export type ArtifactIndexingState = {
 };
 
 /** An immutable point-in-time copy of an artifact record. */
-export type ArtifactRevision<TContent = unknown> = Readonly<
+export type ArtifactRevision<TContent = JsonValue> = Readonly<
   ArtifactRecord<TContent>
 >;
 
@@ -142,19 +161,19 @@ export type ArtifactListQuery = {
 
 export type ArtifactCreateInput = {
   assets?: ArtifactAssetReference[];
-  content: unknown;
+  content: JsonValue;
   createdBy: string;
   kind: string;
-  metadata?: Record<string, unknown>;
+  metadata?: JsonObject;
   provenance?: ArtifactProvenance;
   title: string;
 };
 
 export type ArtifactUpdateInput = {
   assets?: ArtifactAssetReference[];
-  content?: unknown;
+  content?: JsonValue;
   expectedRevision?: number;
-  metadata?: Record<string, unknown>;
+  metadata?: JsonObject;
   title?: string;
 };
 

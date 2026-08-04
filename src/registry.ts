@@ -1,6 +1,11 @@
 import type { Static, TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
-import { ArtifactError, type ArtifactCapability } from "./types";
+import {
+  ArtifactError,
+  isJsonValue,
+  type ArtifactCapability,
+  type JsonValue,
+} from "./types";
 
 export type ArtifactAssetPolicy = {
   /** Exact media types or wildcards such as image/* and application/*. */
@@ -36,7 +41,7 @@ export type ArtifactRegistry<TDefinitions extends ArtifactKindDefinitions> = {
   parse<TKind extends keyof TDefinitions & string>(
     kind: TKind,
     content: unknown,
-  ): ArtifactContent<TDefinitions, TKind>;
+  ): ArtifactContent<TDefinitions, TKind> & JsonValue;
 };
 
 export const defineArtifactRegistry = <
@@ -51,7 +56,7 @@ export const defineArtifactRegistry = <
     if (!definition) {
       throw new ArtifactError("unknown_kind", `Unknown artifact kind: ${kind}`);
     }
-    if (!Value.Check(definition.content, content)) {
+    if (!Value.Check(definition.content, content) || !isJsonValue(content)) {
       const issue = [...Value.Errors(definition.content, content)][0];
       const detail = issue
         ? `${issue.path || "/"}: ${issue.message}`
@@ -62,6 +67,6 @@ export const defineArtifactRegistry = <
       );
     }
 
-    return content as ArtifactContent<TDefinitions, typeof kind>;
+    return content as ArtifactContent<TDefinitions, typeof kind> & JsonValue;
   },
 });

@@ -17,6 +17,7 @@ import {
   type ArtifactPublishInput,
   type ArtifactRecord,
   type ArtifactUpdateInput,
+  type JsonObject,
 } from "./types";
 
 export type ArtifactPublisher = {
@@ -79,7 +80,7 @@ export const createArtifactService = <
   const event = (
     artifact: ArtifactRecord,
     type: ArtifactEventType,
-    payload?: Record<string, unknown>,
+    payload?: JsonObject,
   ): ArtifactEvent => ({
     artifactId: artifact.id,
     createdAt: now(),
@@ -206,7 +207,7 @@ export const createArtifactService = <
     artifact: ArtifactRecord,
     expectedRevision: number,
     type: ArtifactEventType,
-    payload?: Record<string, unknown>,
+    payload?: JsonObject,
   ) => {
     const saved = await options.store.save(artifact, expectedRevision, [
       event(artifact, type, payload),

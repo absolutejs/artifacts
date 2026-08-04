@@ -1,6 +1,6 @@
 {
   "name": "@absolutejs/artifacts",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Typed, versioned artifacts for AI products — schemas, lifecycle, storage, rendering, publishing, revisions, and agent tools without prescribing a database or host.",
   "author": "Alex Kahn",
   "license": "BUSL-1.1",

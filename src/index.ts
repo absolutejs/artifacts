@@ -56,6 +56,7 @@ export {
   ARTIFACT_STATUSES,
   ARTIFACT_EVENT_TYPES,
   ArtifactError,
+  isJsonValue,
   type ArtifactAssetReference,
   type ArtifactAssetRole,
   type ArtifactAssetWriteInput,
@@ -80,4 +81,7 @@ export {
   type ArtifactRetentionCandidate,
   type ArtifactStatus,
   type ArtifactUpdateInput,
+  type JsonObject,
+  type JsonPrimitive,
+  type JsonValue,
 } from "./types";
