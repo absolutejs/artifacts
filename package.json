@@ -1,6 +1,6 @@
 {
   "name": "@absolutejs/artifacts",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "description": "Typed, versioned artifacts for AI products — schemas, lifecycle, storage, rendering, publishing, revisions, and agent tools without prescribing a database or host.",
   "author": "Alex Kahn",
   "license": "BUSL-1.1",
@@ -21,7 +21,7 @@
     "url": "https://github.com/absolutejs/artifacts/issues"
   },
   "scripts": {
-    "build": "rm -rf dist && bun build src/index.ts src/drizzle.ts src/manifest.ts src/rag.ts --outdir dist --root ./src --target=bun --external @absolutejs/rag --external @sinclair/typebox --external @sinclair/typebox/value --external drizzle-orm --external 'drizzle-orm/*' --external drizzle-typebox && tsc --emitDeclarationOnly --project tsconfig.json && absolute-manifest emit",
+    "build": "rm -rf dist && bun build src/index.ts src/drizzle.ts src/manifest.ts src/rag.ts --outdir dist --root ./src --target=bun --external @absolutejs/rag --external @sinclair/typebox --external @sinclair/typebox/value --external typebox --external 'typebox/*' --external drizzle-orm --external 'drizzle-orm/*' --external drizzle-typebox && tsc --emitDeclarationOnly --project tsconfig.json && absolute-manifest emit",
     "format": "prettier --write \"./**/*.{ts,json,md}\"",
     "release": "bun run format && bun run test && bun run build && bun publish",
     "test": "bun test",
@@ -57,9 +57,10 @@
     }
   },
   "dependencies": {
-    "@absolutejs/manifest": "^0.9.0",
+    "@absolutejs/manifest": "^0.10.0",
     "@sinclair/typebox": "^0.34.0",
-    "drizzle-typebox": "1.0.0-beta.14-a36c63d"
+    "drizzle-typebox": "1.0.0-beta.14-a36c63d",
+    "typebox": "^1.3.16"
   },
   "peerDependencies": {
     "@absolutejs/rag": ">=0.1.1 <0.9.0",

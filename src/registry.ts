@@ -1,5 +1,5 @@
-import type { Static, TSchema } from "@sinclair/typebox";
-import { Value } from "@sinclair/typebox/value";
+import type { Static, TSchema } from "typebox";
+import { Value } from "typebox/value";
 import {
   ArtifactError,
   isJsonValue,
@@ -59,7 +59,7 @@ export const defineArtifactRegistry = <
     if (!Value.Check(definition.content, content) || !isJsonValue(content)) {
       const issue = [...Value.Errors(definition.content, content)][0];
       const detail = issue
-        ? `${issue.path || "/"}: ${issue.message}`
+        ? `${issue.instancePath || "/"}: ${issue.message}`
         : "invalid content";
       throw new ArtifactError(
         "invalid_content",

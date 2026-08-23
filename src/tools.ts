@@ -1,4 +1,4 @@
-import { Type, type TSchema } from "@sinclair/typebox";
+import { Type, type TSchema } from "typebox";
 import type { ArtifactService } from "./service";
 import {
   ARTIFACT_STATUSES,
@@ -6,15 +6,20 @@ import {
   type JsonObject,
 } from "./types";
 
-const JsonValueSchema = Type.Recursive((self) =>
-  Type.Union([
-    Type.String(),
-    Type.Number(),
-    Type.Boolean(),
-    Type.Null(),
-    Type.Array(self),
-    Type.Record(Type.String(), self),
-  ]),
+// typebox 1.x replaces Recursive's self-callback with a named $defs entry the
+// schema refers to by name.
+const JsonValueSchema = Type.Cyclic(
+  {
+    JsonValue: Type.Union([
+      Type.String(),
+      Type.Number(),
+      Type.Boolean(),
+      Type.Null(),
+      Type.Array(Type.Ref("JsonValue")),
+      Type.Record(Type.String(), Type.Ref("JsonValue")),
+    ]),
+  },
+  "JsonValue",
 );
 
 export type ArtifactToolDefinition = {

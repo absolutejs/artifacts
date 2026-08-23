@@ -1,4 +1,4 @@
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 import type { ArtifactKindDefinitions } from "./registry";
 
 const FileArtifactContentSchema = Type.Object({

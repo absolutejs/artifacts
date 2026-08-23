@@ -3,7 +3,7 @@ import {
   defineManifest,
   toolFactory,
 } from "@absolutejs/manifest";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 import type { ArtifactService } from "./service";
 
 const tool = toolFactory<ArtifactService>();
@@ -239,7 +239,7 @@ export const manifest = defineManifest<
             from: "@absolutejs/artifacts",
             names: ["createArtifactService", "defineArtifactRegistry"],
           },
-          { from: "@sinclair/typebox", names: ["Type"] },
+          { from: "typebox", names: ["Type"] },
         ],
         placement: "module-scope",
       },
