@@ -24,6 +24,7 @@ routes, authorization, UI, or hosting.
   datasets, code, images, audio, video, email, archives, and generic files
 - An optional bridge to `@absolutejs/rag` ingestion
 - Provider-neutral generation registries with atomic multi-file bundles
+- Staged, validate-before-commit multi-artifact batches with completion receipts
 - Revision-pinned or explicitly live publications
 - Durable lifecycle events designed for transactional outboxes
 - Per-revision RAG indexing state and an indexing coordinator
@@ -168,6 +169,45 @@ const report = await artifacts.createBundle("owner-123", {
   title: "Q3 report",
 });
 ```
+
+When one job must produce several artifacts together, stage the complete batch,
+run domain validators before persistence, and commit it through a store that
+implements `createBatch` (the package Drizzle and memory stores do):
+
+```ts
+const staged = await artifacts.stageBatch(
+  "owner-123",
+  {
+    evidence: [{ sourceId: "research-run-123", sourceUrl: sourceUrl }],
+    items: [
+      { artifact: worksheetInput, key: "worksheet" },
+      { artifact: reportInput, key: "report" },
+    ],
+    provenance: { tool: "prospecting_mission", traceId: mission.id },
+  },
+  {
+    validators: [
+      ({ items }) =>
+        validateDomainEvidence(items).map((message) => ({
+          code: "evidence_invalid",
+          message,
+        })),
+    ],
+  },
+);
+
+const receipt = await staged.commit();
+if (receipt.status !== "committed") throw new Error(receipt.error);
+```
+
+Every artifact carries its batch id, item key, evidence, and provenance.
+`commit()` returns the durable reconciliation receipt: artifact ids,
+revisions, atomicity, validation outcome, and any archived compensation. The
+default mode requires an atomic `ArtifactStore.createBatch`. Hosts that cannot
+provide a transaction may explicitly select `archive_on_failure`; completed
+earlier writes are then archived and reported as `rolled_back` or
+`partial_failure`. Calling `rollback()` before commit releases all staged
+asset transactions.
 
 ## Generation
 

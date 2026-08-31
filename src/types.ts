@@ -31,11 +31,20 @@ export type ArtifactCapability =
   | "refine";
 
 export type ArtifactProvenance = {
+  evidence?: ArtifactEvidenceReference[];
   lineage?: ArtifactLineageReference[];
   model?: string;
   sourceIds?: string[];
   tool?: string;
   traceId?: string;
+};
+
+export type ArtifactEvidenceReference = {
+  capturedAt?: string;
+  excerpt?: string;
+  metadata?: JsonObject;
+  sourceId?: string;
+  sourceUrl?: string;
 };
 
 export type ArtifactLineageRelation =
@@ -181,6 +190,83 @@ export type ArtifactBundleCreateInput = Omit<ArtifactCreateInput, "assets"> & {
   assets?: ArtifactAssetWriteInput[];
 };
 
+export type ArtifactBatchItemInput = {
+  artifact: ArtifactBundleCreateInput;
+  evidence?: ArtifactEvidenceReference[];
+  /** Stable caller-defined key used to reconcile a receipt with requested output. */
+  key: string;
+};
+
+export type ArtifactBatchCommitMode = "archive_on_failure" | "require_atomic";
+
+export type ArtifactBatchCreateInput = {
+  bundleId?: string;
+  commitMode?: ArtifactBatchCommitMode;
+  evidence?: ArtifactEvidenceReference[];
+  items: ArtifactBatchItemInput[];
+  metadata?: JsonObject;
+  provenance?: ArtifactProvenance;
+};
+
+export type ArtifactBatchValidationIssue = {
+  code: string;
+  itemKey?: string;
+  message: string;
+  path?: string;
+};
+
+export type ArtifactBatchValidationResult =
+  | { issues?: never; valid: true }
+  | { issues: ArtifactBatchValidationIssue[]; valid: false };
+
+export type ArtifactBatchReceiptItem = {
+  artifactId: string;
+  archived?: boolean;
+  key: string;
+  kind: string;
+  revision: number;
+  title: string;
+};
+
+export type ArtifactBatchCompletionReceipt = {
+  archivedArtifactIds: string[];
+  atomic: boolean;
+  bundleId: string;
+  completedAt: string;
+  error?: string;
+  items: ArtifactBatchReceiptItem[];
+  ownerId: string;
+  stagedAt: string;
+  status: "committed" | "partial_failure" | "rolled_back";
+  validation: ArtifactBatchValidationResult;
+};
+
+export type ArtifactBatchValidator = (context: {
+  bundleId: string;
+  evidence: ArtifactEvidenceReference[];
+  items: ReadonlyArray<{
+    evidence: ArtifactEvidenceReference[];
+    key: string;
+    record: Readonly<ArtifactRecord>;
+  }>;
+  ownerId: string;
+}) => ArtifactBatchValidationIssue[] | Promise<ArtifactBatchValidationIssue[]>;
+
+export type StagedArtifactBatch = {
+  bundleId: string;
+  commit(): Promise<ArtifactBatchCompletionReceipt>;
+  evidence: ArtifactEvidenceReference[];
+  items: ReadonlyArray<{
+    evidence: ArtifactEvidenceReference[];
+    key: string;
+    record: Readonly<ArtifactRecord>;
+  }>;
+  ownerId: string;
+  rollback(reason?: string): Promise<ArtifactBatchCompletionReceipt>;
+  stagedAt: string;
+  validation: ArtifactBatchValidationResult;
+};
+
 export type ArtifactPublishInput = {
   mode?: "live" | "pinned";
 };
@@ -198,6 +284,8 @@ export type ArtifactGarbageCollectionResult = {
 export type ArtifactErrorCode =
   | "asset_store_unavailable"
   | "asset_transaction_unavailable"
+  | "atomic_batch_unavailable"
+  | "batch_validation_failed"
   | "conflict"
   | "generator_unavailable"
   | "invalid_content"

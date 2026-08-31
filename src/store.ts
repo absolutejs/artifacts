@@ -37,6 +37,10 @@ export type ArtifactAssetStore = {
 export type ArtifactStore = {
   /** Persist the current record and its first immutable revision atomically. */
   create(record: ArtifactRecord, events?: ArtifactEvent[]): Promise<void>;
+  /** Persist multiple records, first revisions, and events in one transaction. */
+  createBatch?(
+    entries: Array<{ events?: ArtifactEvent[]; record: ArtifactRecord }>,
+  ): Promise<void>;
   getIndexingState(
     ownerId: string,
     artifactId: string,
@@ -184,6 +188,19 @@ export const createMemoryArtifactStore = (
       records.set(record.id, clone(record));
       revisions.set(record.id, [clone(record)]);
       for (const event of newEvents) events.set(event.id, clone(event));
+    },
+    createBatch: async (entries) => {
+      const ids = entries.map(({ record }) => record.id);
+      if (new Set(ids).size !== ids.length) {
+        throw new Error("Duplicate artifact id in batch");
+      }
+      const duplicate = ids.find((id) => records.has(id));
+      if (duplicate) throw new Error(`Duplicate artifact id: ${duplicate}`);
+      for (const { events: newEvents = [], record } of entries) {
+        records.set(record.id, clone(record));
+        revisions.set(record.id, [clone(record)]);
+        for (const event of newEvents) events.set(event.id, clone(event));
+      }
     },
     get: async (ownerId, artifactId) => {
       const record = records.get(artifactId);

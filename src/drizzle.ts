@@ -230,6 +230,21 @@ export const createDrizzleArtifactStore = <DB extends AnyPgDatabase>(options: {
       if (events.length > 0)
         await transaction.insert(artifactEvents).values(eventRows(events));
     }),
+  createBatch: (entries) =>
+    options.db.transaction(async (transaction) => {
+      if (entries.length === 0) return;
+      for (const { events = [], record } of entries)
+        assertEventsBelongToArtifact(record, events);
+      await transaction
+        .insert(artifactRecords)
+        .values(entries.map(({ record }) => recordRow(record)));
+      await transaction
+        .insert(artifactRevisions)
+        .values(entries.map(({ record }) => revisionRow(record)));
+      const events = entries.flatMap((entry) => entry.events ?? []);
+      if (events.length > 0)
+        await transaction.insert(artifactEvents).values(eventRows(events));
+    }),
   get: async (ownerId, artifactId) => {
     const [row] = await options.db
       .select({ document: artifactRecords.document })

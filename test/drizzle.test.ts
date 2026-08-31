@@ -55,10 +55,11 @@ const createFixture = async () => {
   `);
   const store = createDrizzleArtifactStore({ db: drizzle({ client }) });
   let eventId = 0;
+  let artifactId = 0;
   const service = createArtifactService({
     clock: () => new Date("2026-07-23T12:00:00.000Z"),
     eventIdFactory: () => `event-${++eventId}`,
-    idFactory: () => "artifact-1",
+    idFactory: () => `artifact-${++artifactId}`,
     registry: defineArtifactRegistry({
       page: {
         capabilities: ["archive", "edit", "preview", "publish"],
@@ -115,6 +116,29 @@ describe("createDrizzleArtifactStore", () => {
     ).toEqual([2, 1]);
     expect(await store.listEvents({ processed: false })).toHaveLength(2);
     expect(await store.listReferencedAssetIds()).toEqual([]);
+  });
+
+  test("atomically commits a staged multi-artifact batch", async () => {
+    const { service, store } = await createFixture();
+    const staged = await service.stageBatch("owner-1", {
+      items: ["worksheet", "report"].map((key) => ({
+        artifact: {
+          content: { body: key },
+          createdBy: "mission",
+          kind: "page",
+          title: key,
+        },
+        key,
+      })),
+    });
+    const receipt = await staged.commit();
+
+    expect(receipt.status).toBe("committed");
+    expect(receipt.atomic).toBe(true);
+    expect(await store.list("owner-1")).toHaveLength(2);
+    expect(await store.listEvents({ type: "artifact.created" })).toHaveLength(
+      2,
+    );
   });
 
   test("enforces optimistic updates and durably advances outbox state", async () => {

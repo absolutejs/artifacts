@@ -1,9 +1,17 @@
 import type { ArtifactKindDefinitions, ArtifactRegistry } from "./registry";
-import type { ArtifactAssetStore, ArtifactStore } from "./store";
+import type {
+  ArtifactAssetStore,
+  ArtifactAssetTransaction,
+  ArtifactStore,
+} from "./store";
 import {
   ArtifactError,
   type ArtifactAssetReference,
   type ArtifactAssetWriteInput,
+  type ArtifactBatchCompletionReceipt,
+  type ArtifactBatchCreateInput,
+  type ArtifactBatchValidationIssue,
+  type ArtifactBatchValidator,
   type ArtifactBundleCreateInput,
   type ArtifactCreateInput,
   type ArtifactEvent,
@@ -18,6 +26,7 @@ import {
   type ArtifactRecord,
   type ArtifactUpdateInput,
   type JsonObject,
+  type StagedArtifactBatch,
 } from "./types";
 
 export type ArtifactPublisher = {
@@ -39,6 +48,7 @@ export type ArtifactServiceOptions<
   TDefinitions extends ArtifactKindDefinitions = ArtifactKindDefinitions,
 > = {
   assetStore?: ArtifactAssetStore;
+  batchIdFactory?: () => string;
   clock?: () => Date;
   eventIdFactory?: () => string;
   idFactory?: () => string;
@@ -76,6 +86,7 @@ export const createArtifactService = <
   const now = () => (options.clock ?? (() => new Date()))().toISOString();
   const idFactory = options.idFactory ?? (() => crypto.randomUUID());
   const eventIdFactory = options.eventIdFactory ?? (() => crypto.randomUUID());
+  const batchIdFactory = options.batchIdFactory ?? (() => crypto.randomUUID());
 
   const event = (
     artifact: ArtifactRecord,
@@ -384,6 +395,314 @@ export const createArtifactService = <
         await transaction.rollback();
         throw error;
       }
+    },
+    stageBatch: async (
+      ownerId: string,
+      input: ArtifactBatchCreateInput,
+      stageOptions: { validators?: ArtifactBatchValidator[] } = {},
+    ): Promise<StagedArtifactBatch> => {
+      if (input.items.length === 0) {
+        throw new ArtifactError(
+          "invalid_content",
+          "An artifact batch must contain at least one artifact",
+        );
+      }
+      const keys = input.items.map((item) => item.key.trim());
+      if (
+        keys.some((key) => key.length === 0) ||
+        new Set(keys).size !== keys.length
+      ) {
+        throw new ArtifactError(
+          "invalid_content",
+          "Artifact batch item keys must be non-empty and unique",
+        );
+      }
+
+      const bundleId = input.bundleId ?? batchIdFactory();
+      const stagedAt = now();
+      const sharedEvidence = input.evidence ?? [];
+      const staged: Array<{
+        evidence: NonNullable<(typeof input.items)[number]["evidence"]>;
+        key: string;
+        record: ArtifactRecord;
+        transaction?: ArtifactAssetTransaction;
+      }> = [];
+      const evidenceJson = (
+        evidence: NonNullable<(typeof input.items)[number]["evidence"]>,
+      ) =>
+        evidence.map((reference) => ({
+          ...(reference.capturedAt ? { capturedAt: reference.capturedAt } : {}),
+          ...(reference.excerpt ? { excerpt: reference.excerpt } : {}),
+          ...(reference.metadata ? { metadata: reference.metadata } : {}),
+          ...(reference.sourceId ? { sourceId: reference.sourceId } : {}),
+          ...(reference.sourceUrl ? { sourceUrl: reference.sourceUrl } : {}),
+        }));
+
+      try {
+        for (const [index, item] of input.items.entries()) {
+          const { assets: assetInputs = [], ...artifactInput } = item.artifact;
+          validateAssetInputs(item.artifact.kind, assetInputs);
+          const evidence = [...sharedEvidence, ...(item.evidence ?? [])];
+          const provisional = buildRecord(
+            ownerId,
+            {
+              ...artifactInput,
+              metadata: {
+                ...input.metadata,
+                ...artifactInput.metadata,
+                artifactBatch: {
+                  bundleId,
+                  evidence: evidenceJson(evidence),
+                  itemKey: item.key,
+                },
+              },
+              provenance: {
+                ...input.provenance,
+                ...artifactInput.provenance,
+                evidence,
+                sourceIds: [
+                  ...new Set([
+                    ...(input.provenance?.sourceIds ?? []),
+                    ...(artifactInput.provenance?.sourceIds ?? []),
+                    ...evidence.flatMap((reference) =>
+                      reference.sourceId ? [reference.sourceId] : [],
+                    ),
+                  ]),
+                ],
+              },
+            },
+            [],
+          );
+          if (assetInputs.length === 0) {
+            staged.push({ evidence, key: item.key, record: provisional });
+            continue;
+          }
+          const assetStore = requireAssetTransactions();
+          const transaction = await assetStore.stage!(assetInputs, {
+            artifact: provisional,
+            idempotencyKey: `artifact-batch:${bundleId}:${index}`,
+          });
+          staged.push({
+            evidence,
+            key: item.key,
+            record: {
+              ...provisional,
+              assets: validateAssets(
+                item.artifact.kind,
+                transaction.references,
+              ),
+            },
+            transaction,
+          });
+        }
+      } catch (error) {
+        await Promise.allSettled(
+          staged.map((item) => item.transaction?.rollback()),
+        );
+        throw error;
+      }
+
+      let validationIssues: ArtifactBatchValidationIssue[];
+      try {
+        validationIssues = (
+          await Promise.all(
+            (stageOptions.validators ?? []).map((validate) =>
+              validate({
+                bundleId,
+                evidence: sharedEvidence,
+                items: staged,
+                ownerId,
+              }),
+            ),
+          )
+        ).flat();
+      } catch (error) {
+        await Promise.allSettled(
+          staged.map((item) => item.transaction?.rollback()),
+        );
+        throw error;
+      }
+      const validation =
+        validationIssues.length === 0
+          ? ({ valid: true } as const)
+          : ({ issues: validationIssues, valid: false } as const);
+      let settled: ArtifactBatchCompletionReceipt | undefined;
+
+      const receiptItems = () =>
+        staged.map(({ key, record }) => ({
+          artifactId: record.id,
+          key,
+          kind: record.kind,
+          revision: record.revision,
+          title: record.title,
+        }));
+      const finish = (
+        partial: Omit<
+          ArtifactBatchCompletionReceipt,
+          | "bundleId"
+          | "completedAt"
+          | "items"
+          | "ownerId"
+          | "stagedAt"
+          | "validation"
+        > & { items?: ArtifactBatchCompletionReceipt["items"] },
+      ) => {
+        settled = {
+          bundleId,
+          completedAt: now(),
+          items: partial.items ?? receiptItems(),
+          ownerId,
+          stagedAt,
+          validation,
+          ...partial,
+        };
+
+        return settled;
+      };
+      const rollbackTransactions = async (
+        candidates = staged,
+      ): Promise<string[]> => {
+        const failures: string[] = [];
+        for (const item of candidates) {
+          if (!item.transaction) continue;
+          try {
+            await item.transaction.rollback();
+          } catch {
+            failures.push(item.key);
+          }
+        }
+
+        return failures;
+      };
+
+      if (!validation.valid) {
+        const failures = await rollbackTransactions();
+        finish({
+          archivedArtifactIds: [],
+          atomic: Boolean(options.store.createBatch),
+          error:
+            failures.length === 0
+              ? "Artifact batch validation failed"
+              : `Artifact batch validation failed; asset rollback failed for: ${failures.join(", ")}`,
+          status: failures.length === 0 ? "rolled_back" : "partial_failure",
+        });
+      }
+
+      return {
+        bundleId,
+        commit: async () => {
+          if (settled) return settled;
+          const transactions = staged.flatMap((item) =>
+            item.transaction ? [item.transaction] : [],
+          );
+          const entries = staged.map(({ key, record }) => ({
+            events: [
+              event(record, "artifact.created", { bundleId, itemKey: key }),
+              event(record, "artifact.generated", { bundleId, itemKey: key }),
+            ],
+            record,
+          }));
+
+          if (options.store.createBatch) {
+            try {
+              for (const transaction of transactions)
+                await transaction.commit();
+              await options.store.createBatch(entries);
+
+              return finish({
+                archivedArtifactIds: [],
+                atomic: true,
+                status: "committed",
+              });
+            } catch (error) {
+              const failures = await rollbackTransactions();
+
+              return finish({
+                archivedArtifactIds: [],
+                atomic: true,
+                error: error instanceof Error ? error.message : String(error),
+                status:
+                  failures.length === 0 ? "rolled_back" : "partial_failure",
+              });
+            }
+          }
+
+          if ((input.commitMode ?? "require_atomic") === "require_atomic") {
+            const failures = await rollbackTransactions();
+
+            return finish({
+              archivedArtifactIds: [],
+              atomic: false,
+              error:
+                "The configured artifact store does not support atomic batches",
+              status: failures.length === 0 ? "rolled_back" : "partial_failure",
+            });
+          }
+
+          const created: typeof staged = [];
+          try {
+            for (const transaction of transactions) await transaction.commit();
+            for (const [index, entry] of entries.entries()) {
+              await options.store.create(entry.record, entry.events);
+              created.push(staged[index]!);
+            }
+
+            return finish({
+              archivedArtifactIds: [],
+              atomic: false,
+              status: "committed",
+            });
+          } catch (error) {
+            const archivedArtifactIds: string[] = [];
+            const archiveFailures: string[] = [];
+            for (const item of created) {
+              try {
+                await service.archive(ownerId, item.record.id);
+                archivedArtifactIds.push(item.record.id);
+              } catch {
+                archiveFailures.push(item.record.id);
+              }
+            }
+            const uncreated = staged.filter((item) => !created.includes(item));
+            const rollbackFailures = await rollbackTransactions(uncreated);
+            const failed = [...archiveFailures, ...rollbackFailures];
+
+            return finish({
+              archivedArtifactIds,
+              atomic: false,
+              error: error instanceof Error ? error.message : String(error),
+              items: receiptItems().map((item) => ({
+                ...item,
+                ...(archivedArtifactIds.includes(item.artifactId)
+                  ? { archived: true }
+                  : {}),
+              })),
+              status: failed.length === 0 ? "rolled_back" : "partial_failure",
+            });
+          }
+        },
+        evidence: sharedEvidence,
+        items: staged,
+        ownerId,
+        rollback: async (
+          reason = "Artifact batch rolled back before commit",
+        ) => {
+          if (settled) return settled;
+          const failures = await rollbackTransactions();
+
+          return finish({
+            archivedArtifactIds: [],
+            atomic: Boolean(options.store.createBatch),
+            error:
+              failures.length === 0
+                ? reason
+                : `${reason}; asset rollback failed for: ${failures.join(", ")}`,
+            status: failures.length === 0 ? "rolled_back" : "partial_failure",
+          });
+        },
+        stagedAt,
+        validation,
+      };
     },
     detach: async (
       ownerId: string,
