@@ -22,7 +22,12 @@ export {
   type ArtifactGenerationResult,
   type ArtifactGenerator,
   type ArtifactGeneratorRegistry,
+  type ArtifactBatchGenerationInput,
+  type ArtifactBatchGenerationItem,
+  type ArtifactBatchGeneratorService,
+  type ArtifactGenerationValidationIssue,
 } from "./generators";
+export { validateGeneratedArtifactFormats } from "./validation";
 export {
   STANDARD_ARTIFACT_KIND_NAMES,
   standardArtifactDefinitions,

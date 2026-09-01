@@ -145,7 +145,12 @@ export type ArtifactEventQuery = {
   type?: ArtifactEventType;
 };
 
-export type ArtifactIndexingStatus = "failed" | "indexed" | "pending" | "stale";
+export type ArtifactIndexingStatus =
+  | "failed"
+  | "indexed"
+  | "partial"
+  | "pending"
+  | "stale";
 
 export type ArtifactIndexingState = {
   artifactId: string;

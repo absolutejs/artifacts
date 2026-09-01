@@ -26,6 +26,7 @@ const registry = defineArtifactRegistry({
     label: "Page",
   },
 });
+const encoder = new TextEncoder();
 
 const createFixture = () => {
   let id = 0;
@@ -413,6 +414,63 @@ describe("artifact lifecycle", () => {
     expect(states.at(-1)).toMatchObject({
       documentIds: ["same", "new"],
       status: "indexed",
+    });
+  });
+
+  test("isolates failed RAG uploads while preserving successful document ids", async () => {
+    const { service } = createFixture();
+    const created = await service.create("owner-1", {
+      content: { blocks: [], theme: "light" },
+      createdBy: "agent",
+      kind: "page",
+      title: "Partially indexed page",
+    });
+    const artifact = {
+      ...created,
+      assets: [
+        {
+          createdAt: new Date().toISOString(),
+          id: "bad-asset",
+          mediaType: "application/broken",
+          name: "broken.bin",
+          role: "primary" as const,
+          size: 4,
+          uri: "memory://broken",
+        },
+      ],
+    };
+    const states: Array<{ documentIds?: string[]; status: string }> = [];
+    const coordinator = createArtifactRAGIndexCoordinator({
+      failureMode: "isolate_uploads",
+      reader: { read: async () => encoder.encode("bad") },
+      service: {
+        getIndexingState: async () => null,
+        markIndexing: async (_ownerId, _artifactId, state) => {
+          states.push(state);
+        },
+      },
+      target: {
+        index: async ([upload]) => {
+          if (upload?.contentType === "application/broken") {
+            throw new Error("extract failed");
+          }
+
+          return { documentIds: ["structured-content"] };
+        },
+      },
+    });
+
+    await expect(coordinator.index(artifact)).rejects.toMatchObject({
+      receipt: {
+        documentIds: ["structured-content"],
+        indexedUploads: 1,
+        status: "partial",
+        totalUploads: 2,
+      },
+    });
+    expect(states.at(-1)).toMatchObject({
+      documentIds: ["structured-content"],
+      status: "partial",
     });
   });
 });

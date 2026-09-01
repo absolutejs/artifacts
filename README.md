@@ -232,6 +232,27 @@ const deck = await generators.generate(artifacts, {
 });
 ```
 
+Generators may expose a `validate` function. The bundled
+`validateGeneratedArtifactFormats` validator checks CSV row structure, RFC 822
+headers, ZIP readability, and PPTX package/XML integrity before persistence.
+Generate several independent artifacts with one atomic receipt through the same
+registry:
+
+```ts
+const receipt = await generators.generateBatch(artifacts, {
+  ownerId: member.id,
+  items: [
+    { createdBy: "agent", key: "deck", kind: "presentation", title: "Deck" },
+    { createdBy: "agent", key: "email", kind: "email", title: "Email" },
+  ],
+  provenance: { tool: "campaign_generator" },
+});
+```
+
+Generation validators run after every output is staged and before anything is
+committed. Validation failures return a rolled-back completion receipt keyed to
+the invalid output.
+
 ## RAG ingestion
 
 The optional `@absolutejs/artifacts/rag` entry point resolves one current or
@@ -250,7 +271,10 @@ const upsert = await buildRAGUpsertInputFromUploads({ uploads });
 
 `createArtifactRAGIndexCoordinator` wraps that conversion with durable
 `pending`, `indexed`, and `failed` state. It removes document IDs from the
-previous indexed revision after the replacement succeeds.
+previous indexed revision after the replacement succeeds. Set `failureMode` to
+`"isolate_uploads"` to index structured content and assets independently. A bad
+asset then produces a typed partial receipt while preserving successful
+document ids; obsolete ids are removed only after a fully successful revision.
 
 ## Events and retention
 

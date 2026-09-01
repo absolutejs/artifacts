@@ -36,10 +36,39 @@ export type ArtifactRAGIndexStateWriter = {
       documentIds?: string[];
       error?: string;
       revision: number;
-      status: "failed" | "indexed" | "pending" | "stale";
+      status: "failed" | "indexed" | "partial" | "pending" | "stale";
     },
   ): Promise<unknown>;
 };
+
+export type ArtifactRAGIndexFailure = {
+  contentType: string;
+  error: string;
+  name: string;
+  source: string;
+};
+
+export type ArtifactRAGIndexReceipt = {
+  artifactId: string;
+  documentIds: string[];
+  failures: ArtifactRAGIndexFailure[];
+  indexedUploads: number;
+  revision: number;
+  status: "failed" | "indexed" | "partial";
+  totalUploads: number;
+};
+
+export class ArtifactRAGPartialIndexError extends Error {
+  readonly receipt: ArtifactRAGIndexReceipt;
+
+  constructor(receipt: ArtifactRAGIndexReceipt) {
+    super(
+      `Artifact ${receipt.artifactId} indexed ${receipt.indexedUploads}/${receipt.totalUploads} uploads; ${receipt.failures.length} failed`,
+    );
+    this.name = "ArtifactRAGPartialIndexError";
+    this.receipt = receipt;
+  }
+}
 
 const artifactMetadata = (artifact: ArtifactRecord) => ({
   artifactId: artifact.id,
@@ -95,6 +124,7 @@ export const artifactToRAGUploads = async (
 };
 
 export const createArtifactRAGIndexCoordinator = (options: {
+  failureMode?: "fail_fast" | "isolate_uploads";
   reader: ArtifactRAGAssetReader;
   service: ArtifactRAGIndexStateWriter;
   target: ArtifactRAGIndexTarget;
@@ -111,6 +141,66 @@ export const createArtifactRAGIndexCoordinator = (options: {
     });
     try {
       const uploads = await artifactToRAGUploads(artifact, options.reader);
+      if (options.failureMode === "isolate_uploads") {
+        const documentIds: string[] = [];
+        const failures: ArtifactRAGIndexFailure[] = [];
+        let indexedUploads = 0;
+        for (const upload of uploads) {
+          try {
+            const indexed = await options.target.index([upload], { artifact });
+            documentIds.push(...indexed.documentIds);
+            indexedUploads += 1;
+          } catch (error) {
+            failures.push({
+              contentType: upload.contentType ?? "application/octet-stream",
+              error: error instanceof Error ? error.message : String(error),
+              name: upload.name ?? "unnamed upload",
+              source: upload.source ?? `artifact:${artifact.id}`,
+            });
+          }
+        }
+        const receipt: ArtifactRAGIndexReceipt = {
+          artifactId: artifact.id,
+          documentIds,
+          failures,
+          indexedUploads,
+          revision: artifact.revision,
+          status:
+            failures.length === 0
+              ? "indexed"
+              : indexedUploads > 0
+                ? "partial"
+                : "failed",
+          totalUploads: uploads.length,
+        };
+        if (failures.length > 0) {
+          await options.service.markIndexing(artifact.ownerId, artifact.id, {
+            documentIds: [
+              ...new Set([...(previous?.documentIds ?? []), ...documentIds]),
+            ],
+            error: JSON.stringify({ failures, receipt }),
+            revision: artifact.revision,
+            status: receipt.status,
+          });
+          throw new ArtifactRAGPartialIndexError(receipt);
+        }
+        if (previous?.documentIds.length && options.target.remove) {
+          const currentIds = new Set(documentIds);
+          const obsoleteIds = previous.documentIds.filter(
+            (documentId) => !currentIds.has(documentId),
+          );
+          if (obsoleteIds.length) {
+            await options.target.remove(obsoleteIds, { artifact });
+          }
+        }
+        await options.service.markIndexing(artifact.ownerId, artifact.id, {
+          documentIds,
+          revision: artifact.revision,
+          status: "indexed",
+        });
+
+        return receipt;
+      }
       const indexed = await options.target.index(uploads, { artifact });
       if (previous?.documentIds.length && options.target.remove) {
         const currentIds = new Set(indexed.documentIds);
@@ -127,8 +217,17 @@ export const createArtifactRAGIndexCoordinator = (options: {
         status: "indexed",
       });
 
-      return indexed;
+      return {
+        artifactId: artifact.id,
+        documentIds: indexed.documentIds,
+        failures: [],
+        indexedUploads: uploads.length,
+        revision: artifact.revision,
+        status: "indexed" as const,
+        totalUploads: uploads.length,
+      };
     } catch (error) {
+      if (error instanceof ArtifactRAGPartialIndexError) throw error;
       await options.service.markIndexing(artifact.ownerId, artifact.id, {
         documentIds: previous?.documentIds,
         error: error instanceof Error ? error.message : String(error),
