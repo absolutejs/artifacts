@@ -29,7 +29,7 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "check:package": "absolute-changelog check",
-    "prepublishOnly": "absolute-changelog check"
+    "prepublishOnly": "bun run check:package"
   },
   "publishConfig": {
     "access": "public"
@@ -81,7 +81,7 @@
   },
   "devDependencies": {
     "@absolutejs/ai": "0.0.47",
-    "@absolutejs/changelog": "^0.5.1",
+    "@absolutejs/changelog": "^0.6.0",
     "@absolutejs/rag": "0.1.1",
     "@absolutejs/sync": "2.11.0",
     "@electric-sql/pglite": "0.3.14",
