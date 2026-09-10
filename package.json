@@ -81,7 +81,7 @@
   },
   "devDependencies": {
     "@absolutejs/ai": "0.0.47",
-    "@absolutejs/changelog": "^0.2.0",
+    "@absolutejs/changelog": "^0.4.0",
     "@absolutejs/rag": "0.1.1",
     "@absolutejs/sync": "2.11.0",
     "@electric-sql/pglite": "0.3.14",
