@@ -474,3 +474,148 @@ describe("artifact lifecycle", () => {
     });
   });
 });
+
+test("isolates reader failures, retains old chunks, and cleans them only after recovery", async () => {
+  const { service } = createFixture();
+  const created = await service.create("owner-1", {
+    content: { blocks: [{ text: "Saved business facts" }], theme: "light" },
+    createdBy: "agent",
+    kind: "page",
+    title: "Read recovery",
+  });
+  const artifact = {
+    ...created,
+    assets: ["broken", "healthy"].map((id) => ({
+      createdAt: new Date().toISOString(),
+      id,
+      mediaType: "application/pdf",
+      name: `${id}.pdf`,
+      role: "primary" as const,
+      size: 4,
+      uri: `memory://${id}`,
+    })),
+  };
+  let broken = true;
+  let ids = ["old"];
+  const removed: string[][] = [];
+  const states: Array<{
+    documentIds?: string[];
+    status: string;
+    error?: string;
+  }> = [];
+  const indexed: string[] = [];
+  const coordinator = createArtifactRAGIndexCoordinator({
+    failureMode: "isolate_uploads",
+    reader: {
+      read: async (asset) => {
+        if (broken && asset.id === "broken")
+          throw Error("PDF rendering failed");
+        return encoder.encode(asset.id);
+      },
+    },
+    service: {
+      getIndexingState: async () => ({ documentIds: ids }),
+      markIndexing: async (_owner, _id, state) => {
+        states.push(state);
+        ids = state.documentIds ?? [];
+      },
+    },
+    target: {
+      index: async ([upload]) => {
+        if (!upload?.source) throw Error("Missing source");
+        indexed.push(upload.source);
+        return { documentIds: [upload.source] };
+      },
+      remove: async (obsolete) => {
+        removed.push(obsolete);
+      },
+    },
+  });
+  await expect(coordinator.index(artifact)).rejects.toMatchObject({
+    receipt: {
+      status: "partial",
+      indexedUploads: 2,
+      totalUploads: 3,
+      failures: [
+        {
+          name: "broken.pdf",
+          error: "PDF rendering failed",
+          contentType: "application/pdf",
+          source: `artifact:${artifact.id}:revision:${artifact.revision}:asset:broken`,
+        },
+      ],
+    },
+  });
+  expect(indexed).toEqual([
+    `artifact:${artifact.id}:revision:${artifact.revision}:content`,
+    `artifact:${artifact.id}:revision:${artifact.revision}:asset:healthy`,
+  ]);
+  expect(ids).toContain("old");
+  expect(removed).toEqual([]);
+  expect(states.at(-1)?.status).toBe("partial");
+  broken = false;
+  const recovered = await coordinator.index(artifact);
+  expect(recovered).toMatchObject({
+    status: "indexed",
+    indexedUploads: 3,
+    totalUploads: 3,
+    failures: [],
+  });
+  expect(removed).toEqual([["old"]]);
+  expect(states.at(-1)?.error).toBeUndefined();
+});
+
+test("fail-fast reader failures never call the index target or delete the prior index", async () => {
+  const { service } = createFixture();
+  const created = await service.create("owner-1", {
+    content: { blocks: [], theme: "light" },
+    createdBy: "agent",
+    kind: "page",
+    title: "Unreadable",
+  });
+  let calls = 0;
+  const states: Array<{ documentIds?: string[]; status: string }> = [];
+  const coordinator = createArtifactRAGIndexCoordinator({
+    reader: {
+      read: async () => {
+        throw Error("Storage unavailable");
+      },
+    },
+    service: {
+      getIndexingState: async () => ({ documentIds: ["old"] }),
+      markIndexing: async (_owner, _id, state) => {
+        states.push(state);
+      },
+    },
+    target: {
+      index: async () => {
+        calls++;
+        return { documentIds: [] };
+      },
+      remove: async () => {
+        throw Error("Must retain old index");
+      },
+    },
+  });
+  await expect(
+    coordinator.index({
+      ...created,
+      assets: [
+        {
+          id: "pdf",
+          name: "broken.pdf",
+          mediaType: "application/pdf",
+          role: "primary",
+          uri: "memory://pdf",
+          createdAt: new Date().toISOString(),
+          size: 1,
+        },
+      ],
+    }),
+  ).rejects.toThrow("Storage unavailable");
+  expect(calls).toBe(0);
+  expect(states.at(-1)).toMatchObject({
+    status: "failed",
+    documentIds: ["old"],
+  });
+});

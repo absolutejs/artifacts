@@ -78,50 +78,56 @@ const artifactMetadata = (artifact: ArtifactRecord) => ({
   ...artifact.metadata,
 });
 
-/**
- * Resolve an artifact revision into upload inputs accepted by @absolutejs/rag.
- * Storage URIs remain opaque; only the supplied reader is allowed to access bytes.
- */
-export const artifactToRAGUploads = async (
+const artifactUploadSources = (
   artifact: ArtifactRecord,
   reader: ArtifactRAGAssetReader,
   options: ArtifactRAGUploadOptions = {},
-): Promise<RAGDocumentUploadInput[]> => {
+) => {
   const metadata = artifactMetadata(artifact);
-  const uploads = await Promise.all(
-    artifact.assets.map(async (asset) => ({
-      content: Buffer.from(await reader.read(asset, { artifact })).toString(
-        "base64",
-      ),
-      contentType: asset.mediaType,
-      encoding: "base64" as const,
-      metadata: {
-        ...metadata,
-        artifactAssetId: asset.id,
-        artifactAssetRole: asset.role,
-        ...asset.metadata,
-      },
-      name: asset.name,
-      source: `artifact:${artifact.id}:revision:${artifact.revision}:asset:${asset.id}`,
-      title: artifact.title,
-    })),
-  );
-
-  if (options.includeStructuredContent === false) return uploads;
-
+  const assets = artifact.assets.map((asset) => ({
+    contentType: asset.mediaType,
+    encoding: "base64" as const,
+    metadata: {
+      ...metadata,
+      artifactAssetId: asset.id,
+      artifactAssetRole: asset.role,
+      ...asset.metadata,
+    },
+    name: asset.name,
+    source: `artifact:${artifact.id}:revision:${artifact.revision}:asset:${asset.id}`,
+    title: artifact.title,
+    read: async () =>
+      Buffer.from(await reader.read(asset, { artifact })).toString("base64"),
+  }));
+  if (options.includeStructuredContent === false) return assets;
   return [
     {
-      content: JSON.stringify(artifact.content),
       contentType: "application/json",
-      encoding: "utf8",
+      encoding: "utf8" as const,
       metadata: { ...metadata, artifactStructuredContent: true },
       name: `${artifact.kind}-${artifact.id}-r${artifact.revision}.json`,
       source: `artifact:${artifact.id}:revision:${artifact.revision}:content`,
       title: artifact.title,
+      read: async () => JSON.stringify(artifact.content),
     },
-    ...uploads,
+    ...assets,
   ];
 };
+
+/** Resolve revision bytes. Storage URIs remain opaque to callers. */
+export const artifactToRAGUploads = async (
+  artifact: ArtifactRecord,
+  reader: ArtifactRAGAssetReader,
+  options: ArtifactRAGUploadOptions = {},
+): Promise<RAGDocumentUploadInput[]> =>
+  Promise.all(
+    artifactUploadSources(artifact, reader, options).map(
+      async ({ read, ...upload }) => ({
+        ...upload,
+        content: await read(),
+      }),
+    ),
+  );
 
 export const createArtifactRAGIndexCoordinator = (options: {
   failureMode?: "fail_fast" | "isolate_uploads";
@@ -140,14 +146,18 @@ export const createArtifactRAGIndexCoordinator = (options: {
       status: "pending",
     });
     try {
-      const uploads = await artifactToRAGUploads(artifact, options.reader);
       if (options.failureMode === "isolate_uploads") {
         const documentIds: string[] = [];
         const failures: ArtifactRAGIndexFailure[] = [];
         let indexedUploads = 0;
-        for (const upload of uploads) {
+        const sources = artifactUploadSources(artifact, options.reader);
+        for (const { read, ...upload } of sources) {
           try {
-            const indexed = await options.target.index([upload], { artifact });
+            const content = await read();
+            const indexed = await options.target.index(
+              [{ ...upload, content }],
+              { artifact },
+            );
             documentIds.push(...indexed.documentIds);
             indexedUploads += 1;
           } catch (error) {
@@ -171,7 +181,7 @@ export const createArtifactRAGIndexCoordinator = (options: {
               : indexedUploads > 0
                 ? "partial"
                 : "failed",
-          totalUploads: uploads.length,
+          totalUploads: sources.length,
         };
         if (failures.length > 0) {
           await options.service.markIndexing(artifact.ownerId, artifact.id, {
@@ -201,6 +211,7 @@ export const createArtifactRAGIndexCoordinator = (options: {
 
         return receipt;
       }
+      const uploads = await artifactToRAGUploads(artifact, options.reader);
       const indexed = await options.target.index(uploads, { artifact });
       if (previous?.documentIds.length && options.target.remove) {
         const currentIds = new Set(indexed.documentIds);
