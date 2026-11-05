@@ -351,3 +351,12 @@ Business Source License 1.1 — free for your own products, applications, and
 internal use; you may not offer it as a competing hosted AI artifact-generation,
 editing, rendering, publishing, or artifact-management service. Converts to
 Apache 2.0 on July 14, 2030. See [LICENSE](./LICENSE).
+
+## Browser document preview
+
+Install the optional `docx-preview` peer and import `renderDocxPreview` from
+`@absolutejs/artifacts/browser`. Pass the original DOCX ArrayBuffer and display
+the returned HTML as `srcDoc` in an iframe with `sandbox=""`. Keep that sandbox:
+the renderer disables active content, external resources, HTML chunks and links.
+Fetch bytes through your application's authenticated owner-scoped file endpoint.
+The browser preview approximates Word layout; always retain the original file.

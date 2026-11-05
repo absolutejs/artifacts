@@ -1,6 +1,6 @@
 {
   "name": "@absolutejs/artifacts",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Typed, versioned artifacts for AI products — schemas, lifecycle, storage, rendering, publishing, revisions, and agent tools without prescribing a database or host.",
   "author": "Alex Kahn",
   "license": "BUSL-1.1",
@@ -23,7 +23,7 @@
     "url": "https://github.com/absolutejs/artifacts/issues"
   },
   "scripts": {
-    "build": "rm -rf dist && bun build src/index.ts src/drizzle.ts src/manifest.ts src/rag.ts --outdir dist --root ./src --target=bun --external @absolutejs/rag --external @sinclair/typebox --external @sinclair/typebox/value --external typebox --external 'typebox/*' --external drizzle-orm --external 'drizzle-orm/*' --external drizzle-typebox && tsc --emitDeclarationOnly --project tsconfig.json && absolute-manifest emit",
+    "build": "rm -rf dist && bun build src/index.ts src/drizzle.ts src/manifest.ts src/rag.ts --outdir dist --root ./src --target=bun --external @absolutejs/rag --external @sinclair/typebox --external @sinclair/typebox/value --external typebox --external 'typebox/*' --external drizzle-orm --external 'drizzle-orm/*' --external drizzle-typebox && bun build src/browser.ts --outdir dist --target=browser --external docx-preview && tsc --emitDeclarationOnly --project tsconfig.json && absolute-manifest emit",
     "format": "prettier --write \"./**/*.{ts,json,md}\"",
     "release": "bun run format && bun run test && bun run build && bun publish",
     "test": "bun test",
@@ -58,6 +58,11 @@
       "types": "./dist/src/rag.d.ts",
       "import": "./dist/rag.js",
       "default": "./dist/rag.js"
+    },
+    "./browser": {
+      "types": "./dist/src/browser.d.ts",
+      "import": "./dist/browser.js",
+      "default": "./dist/browser.js"
     }
   },
   "dependencies": {
@@ -69,13 +74,17 @@
   },
   "peerDependencies": {
     "@absolutejs/rag": ">=0.1.1 <1",
-    "drizzle-orm": ">=1.0.0-rc.4 <2"
+    "drizzle-orm": ">=1.0.0-rc.4 <2",
+    "docx-preview": "^0.3.7"
   },
   "peerDependenciesMeta": {
     "@absolutejs/rag": {
       "optional": true
     },
     "drizzle-orm": {
+      "optional": true
+    },
+    "docx-preview": {
       "optional": true
     }
   },
@@ -89,6 +98,7 @@
     "drizzle-orm": "1.0.0-rc.4",
     "prettier": "3.5.3",
     "typescript": "5.9.3",
-    "elysia": "2.0.0-beta.6"
+    "elysia": "2.0.0-beta.6",
+    "docx-preview": "^0.3.7"
   }
 }

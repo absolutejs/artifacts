@@ -1,30 +1,43 @@
 {
-	"contract": 1,
-	"name": "@absolutejs/artifacts",
-	"releases": [
-		{
-			"changes": [
-				{
-					"kind": "fixed",
-					"summary": "Isolate artifact asset read failures so healthy files and structured content remain indexable, preserving prior chunks until complete recovery"
-				}
-			],
-			"date": "2026-10-29",
-			"version": "0.3.2"
-		},
-		{
-			"changes": [
-				{
-					"kind": "fixed",
-					"summary": "Accept current compatible RAG releases and test artifact indexing against RAG 0.22.0 with registry dependencies",
-					"symbols": [
-						"artifactToRAGUploads",
-						"createArtifactRAGIndexCoordinator"
-					]
-				}
-			],
-			"date": "2026-09-24",
-			"version": "0.3.1"
-		}
-	]
+  "contract": 1,
+  "name": "@absolutejs/artifacts",
+  "releases": [
+    {
+      "version": "0.4.0",
+      "date": "2026-11-05",
+      "changes": [
+        {
+          "kind": "added",
+          "summary": "Browser-only DOCX preview renderer for sandboxed frames with embedded assets and no external viewer service",
+          "symbols": [
+            "renderDocxPreview"
+          ]
+        }
+      ]
+    },
+    {
+      "changes": [
+        {
+          "kind": "fixed",
+          "summary": "Isolate artifact asset read failures so healthy files and structured content remain indexable, preserving prior chunks until complete recovery"
+        }
+      ],
+      "date": "2026-10-29",
+      "version": "0.3.2"
+    },
+    {
+      "changes": [
+        {
+          "kind": "fixed",
+          "summary": "Accept current compatible RAG releases and test artifact indexing against RAG 0.22.0 with registry dependencies",
+          "symbols": [
+            "artifactToRAGUploads",
+            "createArtifactRAGIndexCoordinator"
+          ]
+        }
+      ],
+      "date": "2026-09-24",
+      "version": "0.3.1"
+    }
+  ]
 }
