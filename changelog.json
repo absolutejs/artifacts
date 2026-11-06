@@ -6,6 +6,21 @@
 			"changes": [
 				{
 					"kind": "added",
+					"summary": "Expose the existing safe document text parser and block types through the browser entrypoint, without server dependencies or HTML interpretation.",
+					"symbols": [
+						"documentBlocksFromText",
+						"DocumentBlock",
+						"DocumentRun"
+					]
+				}
+			],
+			"date": "2026-11-06",
+			"version": "0.6.0"
+		},
+		{
+			"changes": [
+				{
+					"kind": "added",
 					"summary": "Render editable, formatted Word documents with headings, real bullets, emphasis and safe clickable links; includes a bounded text-format adapter without HTML interpretation.",
 					"symbols": [
 						"renderFormattedDocx",
