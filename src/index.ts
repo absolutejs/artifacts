@@ -100,3 +100,10 @@ export {
   type JsonValue,
   type StagedArtifactBatch,
 } from "./types";
+export {
+  renderFormattedDocx,
+  type FormattedDocument,
+  type DocumentBlock,
+  type DocumentRun,
+} from "./docx";
+export { documentBlocksFromText } from "./docx";

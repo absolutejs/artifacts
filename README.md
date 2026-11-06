@@ -367,3 +367,16 @@ open outside the document sandbox in a new tab with no opener or referrer.
 Document scripts and parent-page navigation remain disabled. Links remain
 disabled by default. HTTP, executable URLs, credentials, and email parameters
 are not accepted.
+
+### Formatted Word exports
+
+`renderFormattedDocx({ blocks, filename, pageSize: 'letter' })` returns an
+`ArtifactRenderResult` containing editable DOCX bytes. Blocks are paragraphs,
+headings, or bullets; runs support bold, italic, and HTTPS/mailto hyperlinks.
+No resources are fetched. The default body font is 11.5 points. Documents are
+limited to 2,000 blocks and 1 MB of structured input.
+
+For simple generated drafts, `documentBlocksFromText(text)` recognizes blank-line
+paragraphs, `#`/`##` headings, `-`/`*`/`•` bullets, `**bold**`, Markdown links and
+bare HTTPS URLs. This is a limited text format, not a complete Markdown renderer;
+HTML remains literal text. Layout can vary between Word-compatible applications.
