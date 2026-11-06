@@ -1,6 +1,15 @@
+export const documentPreviewHref = (value: string | null): string | null => {
+  if (!value || /[\u0000-\u0020\u007f]/.test(value)) return null;
+  if (/^mailto:[^@?]+@[^@?]+\.[^@?]+$/i.test(value)) return value;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password ? url.href : null;
+  } catch { return null; }
+};
+
 /** Browser-only DOCX rendering. Display the result in an iframe with sandbox="".
  * No document content or credentials are sent to a third-party viewer. */
-export const renderDocxPreview = async (data: ArrayBuffer): Promise<string> => {
+export const renderDocxPreview = async (data: ArrayBuffer, options: { allowLinks?: boolean } = {}): Promise<string> => {
   if (!data.byteLength || data.byteLength > 10 * 1024 * 1024)
     throw new Error("Document must be between 1 byte and 10 MB");
   const { renderAsync } = await import("docx-preview");
@@ -18,6 +27,7 @@ export const renderDocxPreview = async (data: ArrayBuffer): Promise<string> => {
     .querySelectorAll("script, iframe, object, embed, form, link, meta, base")
     .forEach((node) => node.remove());
   isolated.querySelectorAll("*").forEach((node) => {
+    const href = options.allowLinks && node.tagName === 'A' ? documentPreviewHref(node.getAttribute('href')) : null;
     for (const attribute of Array.from(node.attributes)) {
       const name = attribute.name.toLowerCase();
       if (
@@ -28,6 +38,12 @@ export const renderDocxPreview = async (data: ArrayBuffer): Promise<string> => {
         (name === "src" && !/^data:image\//i.test(attribute.value))
       )
         node.removeAttribute(attribute.name);
+    }
+    if (href) {
+      node.setAttribute('href', href);
+      node.setAttribute('target', '_blank');
+      node.setAttribute('rel', 'noopener noreferrer');
+      node.setAttribute('referrerpolicy', 'no-referrer');
     }
   });
   isolated.querySelectorAll<HTMLElement>('section.docx').forEach(page => {

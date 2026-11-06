@@ -3,6 +3,20 @@
   "name": "@absolutejs/artifacts",
   "releases": [
     {
+      "version": "0.4.1",
+      "date": "2026-11-06",
+      "changes": [
+        {
+          "kind": "added",
+          "summary": "Opt-in safe HTTPS and email hyperlinks in DOCX previews, opening with opener and referrer isolation",
+          "symbols": [
+            "renderDocxPreview",
+            "documentPreviewHref"
+          ]
+        }
+      ]
+    },
+    {
       "version": "0.4.0",
       "date": "2026-11-05",
       "changes": [

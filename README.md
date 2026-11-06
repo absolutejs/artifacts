@@ -360,3 +360,10 @@ the returned HTML as `srcDoc` in an iframe with `sandbox=""`. Keep that sandbox:
 the renderer disables active content, external resources, HTML chunks and links.
 Fetch bytes through your application's authenticated owner-scoped file endpoint.
 The browser preview approximates Word layout; always retain the original file.
+
+Pass `{ allowLinks: true }` to preserve validated HTTPS and plain email links.
+Use `sandbox="allow-popups allow-popups-to-escape-sandbox"` for this mode: links
+open outside the document sandbox in a new tab with no opener or referrer.
+Document scripts and parent-page navigation remain disabled. Links remain
+disabled by default. HTTP, executable URLs, credentials, and email parameters
+are not accepted.
